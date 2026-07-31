@@ -1,5 +1,10 @@
-import { createApp } from "../apps/api/dist/app.js";
+let cachedApp;
 
-const app = createApp();
+module.exports = async function handler(req, res) {
+  if (!cachedApp) {
+    const { createApp } = await import("../apps/api/dist/app.js");
+    cachedApp = createApp();
+  }
 
-export default app;
+  return cachedApp(req, res);
+};
