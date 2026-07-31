@@ -1,0 +1,30 @@
+{
+  "name": "gdt-suite",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c green,cyan \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm --workspace apps/api run dev",
+    "dev:web": "npm --workspace apps/web run dev",
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "npm --workspace apps/api run prisma:generate && npm --workspace apps/api run build",
+    "build:web": "npm --workspace apps/web run build",
+    "lint": "npm run lint:api && npm run lint:web",
+    "lint:api": "npm --workspace apps/api run lint",
+    "lint:web": "npm --workspace apps/web run lint",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:push": "npm --workspace apps/api run prisma:push",
+    "db:seed": "npm --workspace apps/api run prisma:seed"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

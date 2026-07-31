@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gdt-suite-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gdt_suite
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "55432:5432"
+    volumes:
+      - gdt_suite_pgdata:/var/lib/postgresql/data
+
+volumes:
+  gdt_suite_pgdata:

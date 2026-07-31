@@ -1,0 +1,31 @@
+DOSSIER PRET POUR GITHUB + VERCEL
+
+Contenu inclus :
+- api
+- apps
+- docs
+- prisma
+- scripts
+- .gitignore
+- .env.example
+- .env.production.example
+- docker-compose.yml
+- package.json
+- package-lock.json
+- README.md
+- tsconfig.base.json
+- vercel.json
+
+Ce qui a ete volontairement exclu :
+- .env
+- node_modules
+- outputs
+- fichiers .log
+- scripts locaux de lancement Windows
+
+Conseil :
+1. Cree un nouveau depot GitHub
+2. Upload le contenu de ce dossier
+3. Sur Vercel, choisis ce projet
+4. Ajoute les variables depuis docs/DEPLOY_VERCEL.md
+5. Deploy

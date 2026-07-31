@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply min-h-screen bg-[#110f0d] text-[#f6efe6] antialiased;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background-image:
+    radial-gradient(circle at top left, rgba(255, 122, 0, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(255, 177, 92, 0.10), transparent 22%),
+    linear-gradient(180deg, #120f0d 0%, #0d0b09 100%);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 145, 53, 0.45) rgba(255, 255, 255, 0.06);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(255, 177, 92, 0.85), rgba(255, 122, 0, 0.7));
+  border-radius: 999px;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.card-shell {
+  @apply rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(255,138,7,.16),transparent_32%),linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02))] shadow-[0_24px_80px_rgba(0,0,0,0.28)];
+}
+
+.panel-shell {
+  @apply rounded-[24px] border border-white/10 bg-black/20 backdrop-blur;
+}
+
+.input-base {
+  @apply h-11 rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-[#f6efe6] outline-none transition placeholder:text-[#b8ab9d] focus:border-orange-400/60 focus:ring-2 focus:ring-orange-400/20;
+}
+
+.textarea-base {
+  @apply rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-[#f6efe6] outline-none transition placeholder:text-[#b8ab9d] focus:border-orange-400/60 focus:ring-2 focus:ring-orange-400/20;
+}
+
+.select-base {
+  @apply input-base appearance-none pr-11;
+  background-color: rgba(12, 10, 8, 0.92);
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(255, 177, 92, 0.9) 50%),
+    linear-gradient(135deg, rgba(255, 177, 92, 0.9) 50%, transparent 50%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  background-position:
+    calc(100% - 20px) calc(50% - 2px),
+    calc(100% - 14px) calc(50% - 2px),
+    center;
+  background-size: 6px 6px, 6px 6px, 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.select-base option,
+.select-base optgroup {
+  background: #17120f;
+  color: #f6efe6;
+}
+
+.select-base option:hover,
+.select-base option:checked {
+  background: #ff8a1f;
+  color: #1c130b;
+}
+
+select.input-base,
+select.select-base {
+  color-scheme: dark;
+  background-color: rgba(12, 10, 8, 0.96);
+}
+
+select.input-base option,
+select.input-base optgroup,
+select.select-base option,
+select.select-base optgroup,
+option {
+  background-color: #17120f;
+  color: #f6efe6;
+}
+
+select.input-base option:checked,
+select.select-base option:checked {
+  background-color: #ff8a1f;
+  color: #1c130b;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-full bg-gradient-to-b from-[#ffb15c] to-[#ff7a00] px-5 py-3 font-semibold text-[#1d140c] shadow-lg transition hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(255,122,0,.22)];
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center rounded-full border border-white/10 bg-[#181512] px-5 py-3 font-semibold text-[#f6efe6] transition hover:border-orange-400/40 hover:bg-[#1d1915];
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium text-[#d9cfc4] transition hover:bg-white/5 hover:text-white;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-[#e6d7c8];
+}
+
+.metric-value {
+  @apply text-sm font-semibold tracking-tight text-white md:text-[1.1rem];
+}
+
+.table-wrap {
+  @apply overflow-hidden rounded-[24px] border border-white/10 bg-black/20;
+}
+
+.data-table {
+  @apply min-w-full divide-y divide-white/10 text-sm;
+}
+
+.data-table thead {
+  @apply bg-white/5;
+}
+
+.data-table th {
+  @apply px-4 py-3 text-left font-medium uppercase tracking-[0.18em] text-[11px] text-[#c4b6a8];
+}
+
+.data-table td {
+  @apply px-4 py-3 text-[#f2e9df];
+}
+
+.data-table tbody tr {
+  @apply border-t border-white/5 transition hover:bg-white/5;
+}
+
+.glass-line {
+  background: linear-gradient(90deg, transparent, rgba(255, 141, 41, 0.45), transparent);
+}

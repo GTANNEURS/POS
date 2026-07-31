@@ -1,0 +1,4 @@
+﻿reference,barcode,name,type,category,brand,unit,warehouse,purchasePriceHt,purchasePriceTtc,salePriceHt,salePriceTtc,taxRate,stockOnHand,minStock,status,description,imageUrl,dimensions,weight
+CHS-002,7980272907999,Babouche classique,Chaussures,Babouches,GDT,Pièce,Boutique Gueliz,180,216,390,468,20,25,5,ACTIVE,Babouche cuir souple,,30 x 12 x 10,0.8 kg
+SAC-002,6110000003,Sac cabas cuir,Sacs,Cabas,GDT,Pièce,Dépôt Central,520,624,950,1140,20,12,3,ACTIVE,Sac cuir grand format,,42 x 16 x 31,1.2 kg
+VET-002,6110000004,Veste artisanale marron,Vêtements,Vestes,Heritage,Pièce,Boutique Gueliz,480,576,980,1176,20,8,2,ACTIVE,Veste finition artisanale,,60 x 40 x 4,0.9 kg
