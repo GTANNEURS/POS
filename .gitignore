@@ -8,3 +8,5 @@ apps/api/generated
 apps/api/prisma/dev.db
 apps/web/.vite
 *.log
+.vercel
+.env*
