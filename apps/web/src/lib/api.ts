@@ -1,4 +1,10 @@
-﻿const API_URL = import.meta.env.VITE_API_URL || "/api";
+function resolveApiUrl() {
+  const raw = String(import.meta.env.VITE_API_URL ?? "").trim();
+  if (!raw || raw === "/" || raw === "[SENSITIVE]") return "/api";
+  return raw.replace(/\/+$/, "");
+}
+
+const API_URL = resolveApiUrl();
 
 export type ApiOptions = RequestInit & { auth?: boolean };
 
