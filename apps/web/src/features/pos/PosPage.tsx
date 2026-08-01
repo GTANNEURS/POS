@@ -2995,23 +2995,15 @@ export function PosPage() {
         {!cart.length ? <EmptyState title="Panier vide" description="" compact /> : null}
       </div>
       </div>
-      <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-stretch lg:w-auto">
-          <div className="grid w-full grid-cols-2 gap-2 lg:w-auto">
-            <Button className="h-[44px] w-full sm:min-w-[148px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold" type="button" variant="secondary" onClick={openShippingModal}>Frais de port</Button>
-            <Button className="h-[44px] w-full sm:min-w-[148px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold" type="button" variant="secondary" onClick={requestTicketDiscountApproval}>Remise ticket</Button>
-            <Button className="h-[44px] w-full sm:min-w-[148px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold" type="button" onClick={openCreditNoteModal}>Bon d'avoir</Button>
-            <Button className="h-[44px] w-full sm:min-w-[148px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold" type="button" variant="secondary" onClick={openDeliveryOrderModal}>Livraison Commande</Button>
-          </div>
-          <Button
-            className="mt-1 h-[90px] w-full rounded-[16px] border border-amber-300/45 bg-gradient-to-b from-amber-500 via-orange-500 to-amber-600 !px-3 !py-0 text-center text-[11px] font-semibold text-black shadow-[0_14px_30px_rgba(245,158,11,0.24)] hover:from-amber-400 hover:via-orange-400 hover:to-amber-500 sm:min-w-[110px] sm:max-w-[110px]"
-            type="button"
-            onClick={() => setOrderModalOpen(true)}
-          >
-            Ajouter une commande
-          </Button>
+      <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 xl:max-w-[520px]">
+          <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight" type="button" variant="secondary" onClick={openShippingModal}>Frais de port</Button>
+          <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight" type="button" variant="secondary" onClick={requestTicketDiscountApproval}>Remise ticket</Button>
+          <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight" type="button" onClick={() => setOrderModalOpen(true)}>Ajouter une commande</Button>
+          <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight" type="button" onClick={openCreditNoteModal}>Bon d'avoir</Button>
+          <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight sm:col-span-2" type="button" variant="secondary" onClick={openDeliveryOrderModal}>Livraison Commande</Button>
         </div>
-        <div className="w-full space-y-1.5 rounded-[16px] border border-white/10 bg-black/25 p-2.5 text-xs text-[#eadfd4] lg:ml-auto lg:max-w-[300px]">
+        <div className="w-full space-y-1.5 rounded-[16px] border border-white/10 bg-black/25 p-2.5 text-xs text-[#eadfd4] xl:ml-auto xl:max-w-[300px]">
           <div className="flex items-center justify-between gap-4"><span>Sous-total articles</span><span className="font-semibold text-white">{formatCurrency(cartBaseSubtotal)}</span></div>
           {lineDiscountTotal > 0 ? <div className="flex items-center justify-between gap-4"><span>Remise articles</span><span className="font-semibold text-orange-100">- {formatCurrency(lineDiscountTotal)}</span></div> : null}
           {ticketDiscountValue > 0 ? <div className="flex items-center justify-between gap-4"><span>Remise ticket</span><span className="font-semibold text-orange-100">- {ticketDiscountMode === "percent" ? `${ticketDiscountDraft}%` : formatCurrency(ticketDiscountValue)}</span></div> : null}
@@ -3858,7 +3850,7 @@ export function PosPage() {
                       <span className="text-[10px] uppercase tracking-[0.18em] text-[#cdbfaf]">Ticket charge</span>
                       <span className="font-semibold text-white">{creditTicketPreview.number}</span>
                     </div>
-                    <div className="mt-1.5 text-[11px] text-[#baa999]">{creditTicketPreview.warehouse.name} • {formatDate(creditTicketPreview.createdAt)}</div>
+                    <div className="mt-1.5 text-[11px] text-[#baa999]">{creditTicketPreview.warehouse.name} â€¢ {formatDate(creditTicketPreview.createdAt)}</div>
                   </div>
                 ) : null}
                 </div>
