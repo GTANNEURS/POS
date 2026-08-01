@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Info, PauseCircle, P
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { formatCurrency, formatDate, formatNumber } from "../../lib/format";
+import { isNetworkError, queueOfflineCheckout } from "../../lib/offline";
 import { Button, EmptyState, Field, Input, LoadingBlock, SectionCard, Select } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
@@ -2792,6 +2793,29 @@ export function PosPage() {
     setMessage("Ticket annule.");
   }
 
+  function clearCheckoutTicket(message: string) {
+    setCart([]);
+    setPaymentEntries([]);
+    setPaymentDraft("0");
+    setCheckoutModalOpen(false);
+    setCurrencyPaymentModalOpen(false);
+    setCurrencyTenderDraft("0");
+    setCurrencyTenderPrimed(false);
+    setTicketDiscountDraft("0");
+    setTicketDiscountMode("percent");
+    setForm((current) => ({
+      ...current,
+      customerId: "",
+      transporterId: "",
+      sellerName: "",
+      note: "",
+      paymentMethod: "CASH",
+      paymentAmount: "0",
+      shippingFee: "0"
+    }));
+    setMessage(message);
+  }
+
   async function checkout() {
     if (!cart.length) return;
     if (!form.registerId) {
@@ -2804,6 +2828,28 @@ export function PosPage() {
     }
     setSaving(true);
     setMessage(null);
+    let offlineDraft: {
+      checkoutPayload: unknown;
+      printableLines: Array<{
+        name: string;
+        reference?: string;
+        color?: string | null;
+        size?: string | null;
+        quantity: number;
+        unitPriceTtc: number;
+        lineTotal: number;
+        discountAmount: number;
+        kind?: "PRODUCT" | "ORDER_DEPOSIT";
+        orderType?: string;
+        orderNumber?: string;
+        orderTotal?: number;
+        depositAmount?: number;
+      }>;
+      paymentSnapshot: PaymentEntry[];
+      receiptContext: Parameters<typeof printPosReceipt>[3];
+      checkoutSellerName: string;
+      checkoutCustomerName: string;
+    } | null = null;
     try {
       const checkoutSellerName = form.sellerName.trim() || "Non renseigne";
       const checkoutCustomerName = customerName;
@@ -2859,31 +2905,28 @@ export function PosPage() {
       }));
       const paymentSnapshot = paymentEntries.map((entry) => ({ ...entry }));
       const noteSnapshot = buildCheckoutNote();
-      const sale = await api<PosCheckoutResult>("/pos/checkout", {
-        method: "POST",
-        body: JSON.stringify({
-          warehouseId: form.warehouseId,
-          registerId: form.registerId,
-          customerId: form.customerId || null,
-          transporterId: form.transporterId || null,
-          sellerName: checkoutSellerName,
-          note: noteSnapshot,
-          shippingFee: Number(form.shippingFee || 0),
-          items,
-          payments: paymentEntries.map((entry) => ({
-            amount: Number(entry.amountMad.toFixed(2)),
-            method: normalizePaymentMethodForCheckout(entry.methodCode, entry.methodLabel),
-            reference: entry.reference || null,
-            tenderedAmount: entry.tenderedAmount ?? null,
-            currencyCode: entry.currencyCode ?? null,
-            changeMad: entry.changeMad ?? 0,
-            changeCurrency: entry.changeCurrency ?? 0,
-            changeMode: entry.changeMode ?? null,
-            detail: entry.detail ?? null
-          }))
-        })
-      });
-      printPosReceipt(sale, printableLines, paymentSnapshot, {
+      const checkoutPayload = {
+        warehouseId: form.warehouseId,
+        registerId: form.registerId,
+        customerId: form.customerId || null,
+        transporterId: form.transporterId || null,
+        sellerName: checkoutSellerName,
+        note: noteSnapshot,
+        shippingFee: Number(form.shippingFee || 0),
+        items,
+        payments: paymentEntries.map((entry) => ({
+          amount: Number(entry.amountMad.toFixed(2)),
+          method: normalizePaymentMethodForCheckout(entry.methodCode, entry.methodLabel),
+          reference: entry.reference || null,
+          tenderedAmount: entry.tenderedAmount ?? null,
+          currencyCode: entry.currencyCode ?? null,
+          changeMad: entry.changeMad ?? 0,
+          changeCurrency: entry.changeCurrency ?? 0,
+          changeMode: entry.changeMode ?? null,
+          detail: entry.detail ?? null
+        }))
+      };
+      const receiptContext = {
         customerName: checkoutCustomerName,
         sellerName: checkoutSellerName,
         warehouseName: checkoutWarehouseName,
@@ -2905,29 +2948,44 @@ export function PosPage() {
         changeDue,
         ticketDiscountValue,
         note: noteSnapshot
+      };
+      offlineDraft = { checkoutPayload, printableLines, paymentSnapshot, receiptContext, checkoutSellerName, checkoutCustomerName };
+      const sale = await api<PosCheckoutResult>("/pos/checkout", {
+        method: "POST",
+        body: JSON.stringify(checkoutPayload)
       });
-      setCart([]);
-      setPaymentEntries([]);
-      setPaymentDraft("0");
-      setCheckoutModalOpen(false);
-      setCurrencyPaymentModalOpen(false);
-      setCurrencyTenderDraft("0");
-      setCurrencyTenderPrimed(false);
-      setTicketDiscountDraft("0");
-      setTicketDiscountMode("percent");
-      setForm((current) => ({
-        ...current,
-        customerId: "",
-        transporterId: "",
-        sellerName: "",
-        note: "",
-        paymentMethod: "CASH",
-        paymentAmount: "0",
-        shippingFee: "0"
-      }));
-      setMessage("Ticket genere avec succes.");
+      printPosReceipt(sale, printableLines, paymentSnapshot, receiptContext);
+      clearCheckoutTicket("Ticket genere avec succes.");
       await load(search);
     } catch (err) {
+      if (offlineDraft && (!navigator.onLine || isNetworkError(err))) {
+        const queued = queueOfflineCheckout(offlineDraft.checkoutPayload, {
+          total: grandTotal,
+          sellerName: offlineDraft.checkoutSellerName,
+          customerName: offlineDraft.checkoutCustomerName
+        });
+        printPosReceipt({
+          id: queued.id,
+          number: queued.receipt.temporaryNumber,
+          createdAt: queued.createdAt,
+          sellerName: queued.receipt.sellerName,
+          totalAmount: grandTotal,
+          paidAmount,
+          shippingFee: shippingFeeValue,
+          note: "Ticket hors ligne en attente de synchronisation.",
+          payments: offlineDraft.paymentSnapshot.map((entry) => ({
+            id: entry.id,
+            amount: entry.amountMad,
+            method: normalizePaymentMethodForCheckout(entry.methodCode, entry.methodLabel),
+            reference: entry.reference
+          }))
+        }, offlineDraft.printableLines, offlineDraft.paymentSnapshot, {
+          ...offlineDraft.receiptContext,
+          note: "Ticket hors ligne en attente de synchronisation."
+        });
+        clearCheckoutTicket(`Mode hors ligne: ticket ${queued.receipt.temporaryNumber} enregistre localement. Synchronisation automatique au retour d'internet.`);
+        return;
+      }
       setMessage(err instanceof Error ? err.message : "Encaissement impossible.");
     } finally {
       setSaving(false);

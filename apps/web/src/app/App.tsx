@@ -1,7 +1,8 @@
-import { Component, Suspense, lazy, type ErrorInfo, type ReactNode } from "react";
+import { Component, Suspense, lazy, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { Button, LoadingBlock } from "../components/ui/primitives";
+import { getOfflineQueueCount, syncOfflineQueue } from "../lib/offline";
 import { AuthProvider, useAuth } from "../providers/AuthProvider";
 
 const LoginPage = lazy(() => import("../features/auth/LoginPage").then((module) => ({ default: module.LoginPage })));
@@ -183,10 +184,65 @@ function PublicApp() {
   );
 }
 
+function OfflineSyncBadge() {
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [pending, setPending] = useState(() => getOfflineQueueCount());
+  const [syncing, setSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState(0);
+  const syncingRef = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function runSync() {
+      setOnline(navigator.onLine);
+      setPending(getOfflineQueueCount());
+      if (!navigator.onLine || getOfflineQueueCount() === 0 || syncingRef.current) return;
+      syncingRef.current = true;
+      setSyncing(true);
+      const result = await syncOfflineQueue().catch(() => ({ synced: 0, pending: getOfflineQueueCount() }));
+      if (!active) return;
+      setPending(result.pending);
+      if (result.synced > 0) setLastSynced(result.synced);
+      syncingRef.current = false;
+      setSyncing(false);
+    }
+
+    const refresh = () => {
+      setOnline(navigator.onLine);
+      setPending(getOfflineQueueCount());
+      void runSync();
+    };
+
+    window.addEventListener("online", refresh);
+    window.addEventListener("offline", refresh);
+    window.addEventListener("gdt-offline-queue-changed", refresh);
+    void runSync();
+    const interval = window.setInterval(refresh, 45000);
+
+    return () => {
+      active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("offline", refresh);
+      window.removeEventListener("gdt-offline-queue-changed", refresh);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  if (online && pending === 0 && lastSynced === 0) return null;
+
+  return (
+    <div className="fixed bottom-4 left-1/2 z-[90] -translate-x-1/2 rounded-full border border-white/15 bg-[#17110d]/95 px-4 py-2 text-xs font-semibold text-white shadow-2xl backdrop-blur">
+      {!online ? "Mode hors ligne actif" : syncing ? "Synchronisation en cours..." : pending > 0 ? `${pending} ticket(s) en attente de synchronisation` : `${lastSynced} ticket(s) synchronise(s)`}
+    </div>
+  );
+}
+
 export function App() {
   return (
     <AppErrorBoundary>
       <AuthProvider>
+        <OfflineSyncBadge />
         <Suspense fallback={<RouteLoader />}>
           <PublicApp />
         </Suspense>
