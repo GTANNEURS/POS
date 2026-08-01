@@ -1058,6 +1058,7 @@ export function AppShell() {
       if (preferredStep === "close" && session) {
         setCashierSessionStep("close");
       } else if (preferredStep === "open" && !session) {
+        setCashierSessionReminder(null);
         setOpeningCashMad("0");
         setOpeningCashEur("0");
         setOpeningCashUsd("0");
@@ -2368,15 +2369,16 @@ export function AppShell() {
                           >
                             Changer mot de passe
                           </Button>
-                          <Button
-                            type="button"
-                            className="w-full !py-3 text-sm"
-                            disabled={!currentCashSession || cashSessionActionLoading === "close"}
-                            onClick={() => setCashierSessionStep("close")}
-                          >
-                            Fermer session et deconnexion
-                          </Button>
-                          {!currentCashSession ? (
+                          {currentCashSession ? (
+                            <Button
+                              type="button"
+                              className="w-full !py-3 text-sm"
+                              disabled={cashSessionActionLoading === "close"}
+                              onClick={() => setCashierSessionStep("close")}
+                            >
+                              Fermer session et deconnexion
+                            </Button>
+                          ) : (
                             <Button
                               type="button"
                               className="w-full !py-3 text-sm"
@@ -2393,7 +2395,7 @@ export function AppShell() {
                             >
                               Ouvrir une nouvelle session
                             </Button>
-                          ) : null}
+                          )}
                         </div>
                       ) : null}
 
