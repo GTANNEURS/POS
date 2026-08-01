@@ -3074,15 +3074,47 @@ posRouter.post("/sessions/open", requirePermissions("cash_manage"), asyncHandler
   const register = await prisma.cashRegister.findUnique({ where: { id: payload.registerId }, select: { warehouseId: true } });
   if (!register) throw new AppError("Caisse introuvable.", 404);
   ensureWarehouseAccess(req.currentUser, register.warehouseId);
-  const existingOpenSession = await prisma.cashSession.findFirst({
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const existingOpenSessions = await prisma.cashSession.findMany({
     where: {
       registerId: payload.registerId,
       status: "OPEN"
     },
+    include: {
+      openedBy: { select: { fullName: true } },
+      register: { select: { name: true } }
+    },
     orderBy: { openedAt: "desc" }
   });
-  if (existingOpenSession) {
-    throw new AppError("Une session de caisse est deja ouverte pour cette caisse.", 422);
+  const activeTodaySession = existingOpenSessions.find((session) => session.openedAt >= todayStart);
+  if (activeTodaySession) {
+    const openedBy = activeTodaySession.openedBy?.fullName ? ` par ${activeTodaySession.openedBy.fullName}` : "";
+    throw new AppError(`La ${activeTodaySession.register.name} est deja ouverte aujourd'hui${openedBy}. Ferme d'abord cette session avant d'en ouvrir une nouvelle.`, 422);
+  }
+  const staleSessions = existingOpenSessions.filter((session) => session.openedAt < todayStart);
+  if (staleSessions.length) {
+    await prisma.$transaction(staleSessions.map((session) => prisma.cashSession.update({
+      where: { id: session.id },
+      data: {
+        status: "CLOSED",
+        closedAt: new Date(),
+        closingAmount: Number(session.openingAmount),
+        expectedAmount: Number(session.openingAmount),
+        varianceAmount: 0
+      }
+    })));
+    await Promise.all(staleSessions.map((session) => writeAuditLog({
+      userId: req.currentUser?.id,
+      action: "cash.close.auto-stale",
+      entityType: "cash_session",
+      entityId: session.id,
+      meta: {
+        reason: "Ouverture automatique d'une nouvelle session apres une session precedente non fermee.",
+        openedAt: session.openedAt,
+        registerId: session.registerId
+      }
+    })));
   }
   const currencies = await prisma.currency.findMany({ where: { isActive: true }, select: { code: true, rateFromMad: true } });
   const currencyRates = new Map(currencies.map((currency) => [currency.code.toUpperCase(), Number(currency.rateFromMad)]));
