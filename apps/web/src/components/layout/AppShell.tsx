@@ -1087,6 +1087,14 @@ export function AppShell() {
     return currentCashSession?.openingBreakdown.find((entry) => entry.currencyCode === currencyCode) ?? null;
   }
 
+  function resolveRateFromMad(currencyCode: "MAD" | "EUR" | "USD", rateFromMad?: number | null) {
+    const configuredRate = Number(rateFromMad ?? 0);
+    if (configuredRate > 0) return configuredRate;
+    if (currencyCode === "EUR") return 0.09206;
+    if (currencyCode === "USD") return 0.1;
+    return 1;
+  }
+
   function convertForeignToMad(amount: number, rateFromMad?: number | null) {
     if (!rateFromMad || rateFromMad <= 0) return 0;
     return amount / rateFromMad;
@@ -1223,8 +1231,8 @@ export function AppShell() {
       return;
     }
 
-    const eurRate = cashSessionCurrencies.find((currency) => currency.code.toUpperCase() === "EUR")?.rateFromMad;
-    const usdRate = cashSessionCurrencies.find((currency) => currency.code.toUpperCase() === "USD")?.rateFromMad;
+    const eurRate = resolveRateFromMad("EUR", cashSessionCurrencies.find((currency) => currency.code.toUpperCase() === "EUR")?.rateFromMad);
+    const usdRate = resolveRateFromMad("USD", cashSessionCurrencies.find((currency) => currency.code.toUpperCase() === "USD")?.rateFromMad);
     const madAmount = Number(openingCashMad || 0);
     const eurAmount = Number(openingCashEur || 0);
     const usdAmount = Number(openingCashUsd || 0);

@@ -66,7 +66,7 @@ const sessionSchema = z.object({
     currencyCode: z.string().min(1),
     amount: z.coerce.number().nonnegative(),
     amountMad: z.coerce.number().nonnegative(),
-    rateFromMad: z.coerce.number().positive().optional()
+    rateFromMad: z.coerce.number().nonnegative().optional()
   })).optional().default([])
 });
 const cashSessionsOverviewQuerySchema = z.object({
@@ -124,6 +124,19 @@ const __dirname = dirname(__filename);
 const legacyOrderLookupScript = resolve(__dirname, "../../../../../../legacy_order_lookup.php");
 const phpBinary = existsSync("C:\\xampp\\php\\php.exe") ? "C:\\xampp\\php\\php.exe" : "php";
 const SALES_DOCUMENTS_KEY = "sales_documents_store";
+const fallbackRateFromMad: Record<string, number> = {
+  MAD: 1,
+  EUR: 0.09206,
+  USD: 0.1
+};
+
+function resolveRateFromMad(currencyCode: string, rateFromMad?: number | null, configuredRate?: number | null) {
+  const submittedRate = Number(rateFromMad ?? 0);
+  if (submittedRate > 0) return submittedRate;
+  const storedRate = Number(configuredRate ?? 0);
+  if (storedRate > 0) return storedRate;
+  return fallbackRateFromMad[currencyCode.toUpperCase()] ?? 1;
+}
 
 function normalizeVoucherNumber(value: string) {
   return value.trim().toUpperCase();
@@ -3071,8 +3084,22 @@ posRouter.post("/sessions/open", requirePermissions("cash_manage"), asyncHandler
   if (existingOpenSession) {
     throw new AppError("Une session de caisse est deja ouverte pour cette caisse.", 422);
   }
-  const session = await prisma.cashSession.create({ data: { registerId: payload.registerId, openingAmount: payload.openingAmount, openedById: req.currentUser!.id, status: "OPEN" } });
-  await writeAuditLog({ userId: req.currentUser?.id, action: "cash.open", entityType: "cash_session", entityId: session.id, meta: payload });
+  const currencies = await prisma.currency.findMany({ where: { isActive: true }, select: { code: true, rateFromMad: true } });
+  const currencyRates = new Map(currencies.map((currency) => [currency.code.toUpperCase(), Number(currency.rateFromMad)]));
+  const openingBreakdown = payload.openingBreakdown
+    .map((entry) => {
+      const currencyCode = entry.currencyCode.trim().toUpperCase();
+      const rateFromMad = resolveRateFromMad(currencyCode, entry.rateFromMad, currencyRates.get(currencyCode));
+      const amount = Number(entry.amount || 0);
+      const amountMad = currencyCode === "MAD" ? amount : Number((amount / rateFromMad).toFixed(2));
+      return { currencyCode, amount, amountMad, rateFromMad };
+    })
+    .filter((entry) => entry.amount > 0);
+  const openingAmount = Number((openingBreakdown.reduce((total, entry) => total + entry.amountMad, 0) || payload.openingAmount).toFixed(2));
+  if (openingAmount <= 0) throw new AppError("Le fond d'ouverture doit etre superieur a 0.", 422);
+  const normalizedPayload = { ...payload, openingAmount, openingBreakdown };
+  const session = await prisma.cashSession.create({ data: { registerId: payload.registerId, openingAmount, openedById: req.currentUser!.id, status: "OPEN" } });
+  await writeAuditLog({ userId: req.currentUser?.id, action: "cash.open", entityType: "cash_session", entityId: session.id, meta: normalizedPayload });
   return ok(res, session, "Session de caisse ouverte.");
 }));
 

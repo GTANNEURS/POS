@@ -827,6 +827,14 @@ export function PosPage() {
     return amount / rateFromMad;
   }
 
+  function resolveRateFromMad(currencyCode: "MAD" | "EUR" | "USD", rateFromMad?: number | null) {
+    const configuredRate = Number(rateFromMad ?? 0);
+    if (configuredRate > 0) return configuredRate;
+    if (currencyCode === "EUR") return 0.09206;
+    if (currencyCode === "USD") return 0.1;
+    return 1;
+  }
+
   function addToCart(product: Product) {
     setCart((current) => {
       const existing = current.find((line) => line.lineId === product.id);
@@ -1828,9 +1836,11 @@ export function PosPage() {
     const madAmount = Number(openingCashMad || 0);
     const eurAmount = Number(openingCashEur || 0);
     const usdAmount = Number(openingCashUsd || 0);
+    const eurRate = resolveRateFromMad("EUR", eurCurrency?.rateFromMad);
+    const usdRate = resolveRateFromMad("USD", usdCurrency?.rateFromMad);
     const totalMad = madAmount
-      + convertForeignToMad(eurAmount, eurCurrency?.rateFromMad)
-      + convertForeignToMad(usdAmount, usdCurrency?.rateFromMad);
+      + convertForeignToMad(eurAmount, eurRate)
+      + convertForeignToMad(usdAmount, usdRate);
 
     if (totalMad <= 0) {
       setMessage("Le fond d'ouverture doit etre superieur a 0.");
@@ -1846,8 +1856,8 @@ export function PosPage() {
           openingAmount: Number(totalMad.toFixed(2)),
           openingBreakdown: [
             { currencyCode: "MAD", amount: madAmount, amountMad: madAmount, rateFromMad: 1 },
-            { currencyCode: "EUR", amount: eurAmount, amountMad: Number(convertForeignToMad(eurAmount, eurCurrency?.rateFromMad).toFixed(2)), rateFromMad: Number(eurCurrency?.rateFromMad ?? 0) },
-            { currencyCode: "USD", amount: usdAmount, amountMad: Number(convertForeignToMad(usdAmount, usdCurrency?.rateFromMad).toFixed(2)), rateFromMad: Number(usdCurrency?.rateFromMad ?? 0) }
+            { currencyCode: "EUR", amount: eurAmount, amountMad: Number(convertForeignToMad(eurAmount, eurRate).toFixed(2)), rateFromMad: eurRate },
+            { currencyCode: "USD", amount: usdAmount, amountMad: Number(convertForeignToMad(usdAmount, usdRate).toFixed(2)), rateFromMad: usdRate }
           ].filter((entry) => entry.amount > 0)
         })
       });
