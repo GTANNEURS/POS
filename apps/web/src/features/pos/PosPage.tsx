@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Info, PauseCircle, P
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { formatCurrency, formatDate, formatNumber } from "../../lib/format";
-import { hasCachedOpenCashSession, isNetworkError, queueOfflineCheckout, rememberOpenCashSession } from "../../lib/offline";
+import { hasCachedOpenCashSession, isNetworkError, queueOfflineCheckout, readPosSnapshot, rememberOpenCashSession, rememberPosSnapshot } from "../../lib/offline";
 import { Button, EmptyState, Field, Input, LoadingBlock, SectionCard, Select } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
@@ -501,10 +501,21 @@ export function PosPage() {
 
   async function load(query = "", options: { showLoading?: boolean } = { showLoading: true }) {
     if (options.showLoading !== false) setLoading(true);
-    const [productList, bootstrap] = await Promise.all([
-      api<Product[]>(`/pos/catalog${query ? `?query=${encodeURIComponent(query)}` : ""}`),
-      api<PosBootstrapPayload>("/pos/bootstrap")
-    ]);
+    let productList: Product[];
+    let bootstrap: PosBootstrapPayload;
+    try {
+      [productList, bootstrap] = await Promise.all([
+        api<Product[]>(`/pos/catalog${query ? `?query=${encodeURIComponent(query)}` : ""}`),
+        api<PosBootstrapPayload>("/pos/bootstrap")
+      ]);
+      rememberPosSnapshot({ productList, bootstrap });
+    } catch (error) {
+      const cached = readPosSnapshot<{ productList: Product[]; bootstrap: PosBootstrapPayload }>();
+      if (!cached || !isNetworkError(error)) throw error;
+      productList = cached.productList;
+      bootstrap = cached.bootstrap;
+      setMessage("Mode hors ligne: catalogue caisse charge depuis cet ordinateur.");
+    }
     setCatalog(productList);
     setCustomers(bootstrap.customers);
     setWarehouses(bootstrap.warehouses);

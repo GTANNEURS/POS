@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
+import { isNetworkError, isOfflineToken, loginOfflineCashier, rememberOfflineCashierLogin } from "../lib/offline";
 
 type User = {
   id: string;
@@ -43,9 +44,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (isOfflineToken(token)) {
+      const cachedUser = localStorage.getItem("gdt_offline_user");
+      if (cachedUser) {
+        setUser(JSON.parse(cachedUser) as User);
+      }
+      setReady(true);
+      return;
+    }
+
     api<User>("/auth/me")
       .then((profile) => setUser(profile))
-      .catch(() => {
+      .catch((error) => {
+        if (isNetworkError(error)) {
+          const cachedUser = localStorage.getItem("gdt_last_user");
+          if (cachedUser) {
+            setUser(JSON.parse(cachedUser) as User);
+            setReady(true);
+            return;
+          }
+        }
         localStorage.removeItem("gdt_access_token");
         setToken(null);
         setUser(null);
@@ -59,23 +77,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionScope,
     ready,
     async login(credentials: LoginCredentials, options?: { scope?: SessionScope }) {
-      const data = await api<{ accessToken: string; user: User }>("/auth/login", {
-        method: "POST",
-        auth: false,
-        body: JSON.stringify(credentials)
-      });
+      let data: { accessToken: string; user: User };
+      try {
+        data = await api<{ accessToken: string; user: User }>("/auth/login", {
+          method: "POST",
+          auth: false,
+          body: JSON.stringify(credentials)
+        });
+      } catch (error) {
+        if (credentials.loginType === "caissier" && isNetworkError(error)) {
+          const offlineUser = await loginOfflineCashier(credentials.code);
+          if (offlineUser) {
+            data = { accessToken: `offline:${offlineUser.id}`, user: offlineUser };
+          } else {
+            throw new Error("Connexion hors ligne impossible. Connecte ce caissier une fois en ligne sur cet ordinateur.");
+          }
+        } else {
+          throw error;
+        }
+      }
       localStorage.setItem("gdt_access_token", data.accessToken);
       const nextScope = options?.scope === "command_validation" ? "command_validation" : "full";
       localStorage.setItem("gdt_session_scope", nextScope);
+      localStorage.setItem(isOfflineToken(data.accessToken) ? "gdt_offline_user" : "gdt_last_user", JSON.stringify(data.user));
+      if (credentials.loginType === "caissier" && !isOfflineToken(data.accessToken)) {
+        await rememberOfflineCashierLogin(credentials.code, data.user);
+      }
       setToken(data.accessToken);
       setSessionScope(nextScope);
       setUser(data.user);
       return data.user;
     },
     async logout() {
-      await api("/auth/logout", { method: "POST" });
+      if (!isOfflineToken(token)) {
+        await api("/auth/logout", { method: "POST" }).catch(() => undefined);
+      }
       localStorage.removeItem("gdt_access_token");
       localStorage.removeItem("gdt_session_scope");
+      localStorage.removeItem("gdt_offline_user");
       setToken(null);
       setSessionScope("full");
       setUser(null);

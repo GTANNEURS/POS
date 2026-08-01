@@ -2,6 +2,8 @@ import { api } from "./api";
 
 const OFFLINE_QUEUE_KEY = "gdt_offline_queue_v1";
 const OFFLINE_CASH_SESSION_KEY = "gdt_offline_cash_sessions_v1";
+const OFFLINE_CASHIER_KEY = "gdt_offline_cashiers_v1";
+const OFFLINE_POS_SNAPSHOT_KEY = "gdt_offline_pos_snapshot_v1";
 
 type QueuedCheckout = {
   id: string;
@@ -19,11 +21,24 @@ type QueuedCheckout = {
 };
 
 type OfflineQueueItem = QueuedCheckout;
+type CachedUser = {
+  id: string;
+  email: string;
+  fullName: string;
+  roles: string[];
+  permissions: string[];
+  defaultWarehouse: { id: string; name: string; code: string; type: string } | null;
+};
 type CachedCashSession = {
   registerId: string;
   warehouseId: string;
   date: string;
   openedAt: string;
+  cachedAt: string;
+};
+type CachedCashier = {
+  user: CachedUser;
+  pinHash: string;
   cachedAt: string;
 };
 
@@ -44,6 +59,68 @@ function writeQueue(items: OfflineQueueItem[]) {
 
 export function getOfflineQueueCount() {
   return readQueue().length;
+}
+
+async function sha256(value: string) {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function sanitizePin(value: string) {
+  return value.replace(/^CSH[-:]/i, "").replace(/\D+/g, "").slice(0, 12);
+}
+
+function readCashiers(): CachedCashier[] {
+  try {
+    const raw = localStorage.getItem(OFFLINE_CASHIER_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCashiers(items: CachedCashier[]) {
+  localStorage.setItem(OFFLINE_CASHIER_KEY, JSON.stringify(items));
+}
+
+export function isOfflineToken(token?: string | null) {
+  return Boolean(token?.startsWith("offline:"));
+}
+
+export async function rememberOfflineCashierLogin(code: string, user: CachedUser) {
+  if (!user.roles.some((role) => role.toLowerCase() === "caissier")) return;
+  const pin = sanitizePin(code);
+  if (pin.length < 4) return;
+  const pinHash = await sha256(`${user.id}:${pin}`);
+  const others = readCashiers().filter((entry) => entry.user.id !== user.id);
+  writeCashiers([...others, { user, pinHash, cachedAt: new Date().toISOString() }].slice(-20));
+}
+
+export async function loginOfflineCashier(code: string) {
+  const pin = sanitizePin(code);
+  if (pin.length < 4) return null;
+  const cashiers = readCashiers();
+  for (const entry of cashiers) {
+    const pinHash = await sha256(`${entry.user.id}:${pin}`);
+    if (pinHash === entry.pinHash) return entry.user;
+  }
+  return null;
+}
+
+export function rememberPosSnapshot(snapshot: unknown) {
+  localStorage.setItem(OFFLINE_POS_SNAPSHOT_KEY, JSON.stringify({ snapshot, cachedAt: new Date().toISOString() }));
+}
+
+export function readPosSnapshot<T>() {
+  try {
+    const raw = localStorage.getItem(OFFLINE_POS_SNAPSHOT_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed?.snapshot as T | null;
+  } catch {
+    return null;
+  }
 }
 
 function readCashSessionCache(): CachedCashSession[] {
