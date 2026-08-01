@@ -24,6 +24,7 @@ import {
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { cn } from "../../lib/format";
+import { rememberOpenCashSession } from "../../lib/offline";
 import { useAuth } from "../../providers/AuthProvider";
 import { Button, EmptyState, Input, LoadingBlock } from "../ui/primitives";
 
@@ -799,6 +800,11 @@ export function AppShell() {
     }
 
     setCashierSessionReminder(null);
+    rememberOpenCashSession({
+      registerId: session.register.id,
+      warehouseId: session.register.warehouseId,
+      openedAt: session.openedAt
+    });
   }
 
   async function refreshCashierSessionState(options?: { includeSetup?: boolean }) {

@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Info, PauseCircle, P
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../lib/api";
 import { formatCurrency, formatDate, formatNumber } from "../../lib/format";
-import { isNetworkError, queueOfflineCheckout } from "../../lib/offline";
+import { hasCachedOpenCashSession, isNetworkError, queueOfflineCheckout, rememberOpenCashSession } from "../../lib/offline";
 import { Button, EmptyState, Field, Input, LoadingBlock, SectionCard, Select } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
@@ -1654,9 +1654,17 @@ export function PosPage() {
         date: todayIso
       });
       const report = await api<PosCashReport>(`/pos/reports/cash?${params.toString()}`);
-      return report.session?.status === "OPEN";
+      const isOpen = report.session?.status === "OPEN";
+      if (isOpen) {
+        rememberOpenCashSession({
+          registerId,
+          warehouseId: form.warehouseId,
+          openedAt: report.session?.openedAt
+        });
+      }
+      return isOpen;
     } catch {
-      return false;
+      return hasCachedOpenCashSession({ registerId, warehouseId: form.warehouseId, date: todayIso });
     }
   }
 
@@ -1862,6 +1870,7 @@ export function PosPage() {
           ].filter((entry) => entry.amount > 0)
         })
       });
+      rememberOpenCashSession({ registerId, warehouseId: form.warehouseId });
       setCashSessionModalOpen(false);
       setMessage("Ouverture de caisse enregistree.");
       if (cashReportModalOpen) {

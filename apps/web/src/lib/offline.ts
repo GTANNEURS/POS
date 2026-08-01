@@ -1,6 +1,7 @@
 import { api } from "./api";
 
 const OFFLINE_QUEUE_KEY = "gdt_offline_queue_v1";
+const OFFLINE_CASH_SESSION_KEY = "gdt_offline_cash_sessions_v1";
 
 type QueuedCheckout = {
   id: string;
@@ -18,6 +19,13 @@ type QueuedCheckout = {
 };
 
 type OfflineQueueItem = QueuedCheckout;
+type CachedCashSession = {
+  registerId: string;
+  warehouseId: string;
+  date: string;
+  openedAt: string;
+  cachedAt: string;
+};
 
 function readQueue(): OfflineQueueItem[] {
   try {
@@ -36,6 +44,40 @@ function writeQueue(items: OfflineQueueItem[]) {
 
 export function getOfflineQueueCount() {
   return readQueue().length;
+}
+
+function readCashSessionCache(): CachedCashSession[] {
+  try {
+    const raw = localStorage.getItem(OFFLINE_CASH_SESSION_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCashSessionCache(items: CachedCashSession[]) {
+  localStorage.setItem(OFFLINE_CASH_SESSION_KEY, JSON.stringify(items));
+}
+
+export function rememberOpenCashSession(input: { registerId: string; warehouseId: string; openedAt?: string }) {
+  if (!input.registerId || !input.warehouseId) return;
+  const openedAt = input.openedAt || new Date().toISOString();
+  const date = new Date(openedAt).toLocaleDateString("en-CA");
+  const nextSession: CachedCashSession = {
+    registerId: input.registerId,
+    warehouseId: input.warehouseId,
+    date,
+    openedAt,
+    cachedAt: new Date().toISOString()
+  };
+  const others = readCashSessionCache().filter((item) => !(item.registerId === input.registerId && item.warehouseId === input.warehouseId));
+  writeCashSessionCache([...others, nextSession].slice(-20));
+}
+
+export function hasCachedOpenCashSession(input: { registerId: string; warehouseId: string; date?: string }) {
+  const date = input.date || new Date().toLocaleDateString("en-CA");
+  return readCashSessionCache().some((item) => item.registerId === input.registerId && item.warehouseId === input.warehouseId && item.date === date);
 }
 
 export function isNetworkError(error: unknown) {
