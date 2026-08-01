@@ -26,9 +26,15 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     headers
   });
 
-  const payload = await response.json().catch(() => ({}));
+  const contentType = response.headers.get("content-type") ?? "";
+  const payload = contentType.includes("application/json")
+    ? await response.json().catch(() => ({}))
+    : {};
   if (!response.ok || payload.ok === false) {
-    throw new Error(payload.message || "Erreur API");
+    const message = typeof payload.message === "string" && payload.message.trim()
+      ? payload.message
+      : `Erreur API ${response.status} sur ${path}`;
+    throw new Error(message);
   }
 
   return payload.data as T;
