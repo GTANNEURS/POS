@@ -3087,14 +3087,8 @@ posRouter.post("/sessions/open", requirePermissions("cash_manage"), asyncHandler
     },
     orderBy: { openedAt: "desc" }
   });
-  const activeTodaySession = existingOpenSessions.find((session) => session.openedAt >= todayStart);
-  if (activeTodaySession) {
-    const openedBy = activeTodaySession.openedBy?.fullName ? ` par ${activeTodaySession.openedBy.fullName}` : "";
-    throw new AppError(`La ${activeTodaySession.register.name} est deja ouverte aujourd'hui${openedBy}. Ferme d'abord cette session avant d'en ouvrir une nouvelle.`, 422);
-  }
-  const staleSessions = existingOpenSessions.filter((session) => session.openedAt < todayStart);
-  if (staleSessions.length) {
-    await prisma.$transaction(staleSessions.map((session) => prisma.cashSession.update({
+  if (existingOpenSessions.length) {
+    await prisma.$transaction(existingOpenSessions.map((session) => prisma.cashSession.update({
       where: { id: session.id },
       data: {
         status: "CLOSED",
@@ -3104,13 +3098,16 @@ posRouter.post("/sessions/open", requirePermissions("cash_manage"), asyncHandler
         varianceAmount: 0
       }
     })));
-    await Promise.all(staleSessions.map((session) => writeAuditLog({
+    await Promise.all(existingOpenSessions.map((session) => writeAuditLog({
       userId: req.currentUser?.id,
-      action: "cash.close.auto-stale",
+      action: session.openedAt >= todayStart ? "cash.close.auto-replaced" : "cash.close.auto-stale",
       entityType: "cash_session",
       entityId: session.id,
       meta: {
-        reason: "Ouverture automatique d'une nouvelle session apres une session precedente non fermee.",
+        reason: session.openedAt >= todayStart
+          ? "Remplacement automatique d'une session deja ouverte sur cette caisse."
+          : "Ouverture automatique d'une nouvelle session apres une session precedente non fermee.",
+        openedBy: session.openedBy?.fullName ?? null,
         openedAt: session.openedAt,
         registerId: session.registerId
       }
