@@ -1,4 +1,4 @@
-import { LockKeyhole, Mail, ScanLine, UserRound, X } from "lucide-react";
+import { Calculator, ClipboardList, LockKeyhole, Mail, ScanLine, UserRound, UsersRound, X } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Input } from "../../components/ui/primitives";
@@ -33,6 +33,7 @@ export function LoginPage() {
   const [commandPassword, setCommandPassword] = useState("");
   const [commandLoading, setCommandLoading] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [spaceNotice, setSpaceNotice] = useState<string | null>(null);
 
   const title = useMemo(() => {
     if (mode === "admin") return "Accès Administrateurs";
@@ -150,24 +151,47 @@ export function LoginPage() {
           <div className="mt-8 grid grid-cols-3 gap-4">
             <button
               type="button"
-              className="rounded-[22px] border border-orange-300/20 bg-gradient-to-br from-orange-400/12 to-orange-500/8 p-4 text-left transition hover:border-orange-300/35 hover:bg-orange-400/10"
+              className="group relative overflow-hidden rounded-[24px] border border-orange-300/25 bg-[linear-gradient(145deg,rgba(255,162,55,0.22),rgba(80,45,20,0.42))] p-4 text-left shadow-[0_18px_44px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.12)] transition duration-200 hover:-translate-y-1 hover:border-orange-300/55 hover:bg-[linear-gradient(145deg,rgba(255,172,72,0.34),rgba(105,58,24,0.5))] hover:shadow-[0_24px_56px_rgba(255,127,24,0.18)]"
               onClick={() => {
+                setSpaceNotice(null);
                 setCommandAccessOpen(true);
                 setCommandError(null);
               }}
             >
-              <p className="text-sm font-semibold text-white">Espace Gestion Commandes</p>
+              <span className="absolute right-0 top-0 h-20 w-20 translate-x-8 -translate-y-8 rounded-full bg-orange-300/20 blur-2xl transition group-hover:bg-orange-300/35" />
+              <span className="relative flex h-10 w-10 items-center justify-center rounded-[16px] border border-orange-200/20 bg-orange-300/15 text-orange-100 shadow-inner">
+                <ClipboardList className="h-5 w-5" />
+              </span>
+              <p className="relative mt-4 text-sm font-semibold text-white">Espace Gestion Commandes</p>
+              <p className="relative mt-2 text-xs leading-5 text-[#dbcab8]">Validation des commandes caisse.</p>
             </button>
             {[
-              { label: "Espace Comptable", detail: "" },
-              { label: "Espace Clients", detail: "" }
-            ].map((item) => (
-              <div key={item.label} className="rounded-[22px] border border-white/10 bg-black/20 p-4">
-                <p className="text-sm font-semibold text-white">{item.label}</p>
-                <p className="mt-2 text-sm text-[#d7c7b9]">{item.detail}</p>
-              </div>
-            ))}
+              { label: "Espace Comptable", detail: "Module comptabilite en preparation.", icon: Calculator },
+              { label: "Espace Clients", detail: "Portail clients en preparation.", icon: UsersRound }
+            ].map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  className="group relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(145deg,rgba(255,255,255,0.07),rgba(0,0,0,0.24))] p-4 text-left shadow-[0_16px_38px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.08)] transition duration-200 hover:-translate-y-1 hover:border-orange-300/35 hover:bg-[linear-gradient(145deg,rgba(255,178,95,0.16),rgba(70,44,28,0.38))] hover:shadow-[0_22px_52px_rgba(98,58,30,0.22)]"
+                  onClick={() => setSpaceNotice(`${item.label} est en maintenance et n'est pas accessible en ce moment.`)}
+                >
+                  <span className="absolute right-0 top-0 h-20 w-20 translate-x-10 -translate-y-10 rounded-full bg-white/10 blur-2xl transition group-hover:bg-orange-300/18" />
+                  <span className="relative flex h-10 w-10 items-center justify-center rounded-[16px] border border-white/10 bg-white/5 text-[#eadccf] shadow-inner transition group-hover:border-orange-300/30 group-hover:text-orange-100">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <p className="relative mt-4 text-sm font-semibold text-white">{item.label}</p>
+                  <p className="relative mt-2 text-xs leading-5 text-[#d7c7b9]">{item.detail}</p>
+                </button>
+              );
+            })}
           </div>
+          {spaceNotice ? (
+            <div className="mt-4 rounded-[18px] border border-orange-300/25 bg-orange-300/10 px-4 py-3 text-sm font-medium text-orange-100 shadow-[0_14px_34px_rgba(0,0,0,0.18)]">
+              {spaceNotice}
+            </div>
+          ) : null}
         </section>
 
         <section className="card-shell p-6 md:p-8">
