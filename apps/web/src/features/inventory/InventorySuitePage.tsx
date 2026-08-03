@@ -23,7 +23,7 @@ export function InventorySuitePage() {
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            className={activeTab === "count" ? "app-menu-button app-menu-button-active inline-flex h-10 items-center rounded-full border px-5 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle inline-flex h-10 items-center rounded-full border px-5 text-sm font-semibold text-[#d4c1b1]"}
+            className={activeTab === "count" ? "app-menu-button app-menu-button-active app-inventory-tab app-inventory-tab-active inline-flex h-10 items-center rounded-full border px-5 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle app-inventory-tab app-inventory-tab-idle inline-flex h-10 items-center rounded-full border px-5 text-sm font-semibold text-[#d4c1b1]"}
             onClick={() => setActiveTab("count")}
           >
             <ClipboardCheck className="mr-2 h-4 w-4" />
@@ -31,7 +31,7 @@ export function InventorySuitePage() {
           </button>
           <button
             type="button"
-            className={activeTab === "stock" ? "app-menu-button app-menu-button-active inline-flex h-10 items-center rounded-full border px-5 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle inline-flex h-10 items-center rounded-full border px-5 text-sm font-semibold text-[#d4c1b1]"}
+            className={activeTab === "stock" ? "app-menu-button app-menu-button-active app-inventory-tab app-inventory-tab-active inline-flex h-10 items-center rounded-full border px-5 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle app-inventory-tab app-inventory-tab-idle inline-flex h-10 items-center rounded-full border px-5 text-sm font-semibold text-[#d4c1b1]"}
             onClick={() => setActiveTab("stock")}
           >
             <Package2 className="mr-2 h-4 w-4" />

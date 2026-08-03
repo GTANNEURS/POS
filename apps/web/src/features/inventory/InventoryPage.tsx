@@ -494,21 +494,21 @@ export function InventoryPage() {
             <button
               type="button"
               onClick={() => setActiveTab("overview")}
-              className={activeTab === "overview" ? "app-menu-button app-menu-button-active rounded-full border px-5 py-2 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle rounded-full border px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
+              className={activeTab === "overview" ? "app-menu-button app-menu-button-active app-inventory-tab app-inventory-tab-active rounded-full border px-5 py-2 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle app-inventory-tab app-inventory-tab-idle rounded-full border px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
             >
               Stock par emplacement
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("negative")}
-              className={activeTab === "negative" ? "app-menu-button app-menu-button-active rounded-full border px-5 py-2 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle rounded-full border px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
+              className={activeTab === "negative" ? "app-menu-button app-menu-button-active app-inventory-tab app-inventory-tab-active rounded-full border px-5 py-2 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle app-inventory-tab app-inventory-tab-idle rounded-full border px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
             >
               Stock negatif
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("movements")}
-              className={activeTab === "movements" ? "app-menu-button app-menu-button-active rounded-full border px-5 py-2 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle rounded-full border px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
+              className={activeTab === "movements" ? "app-menu-button app-menu-button-active app-inventory-tab app-inventory-tab-active rounded-full border px-5 py-2 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle app-inventory-tab app-inventory-tab-idle rounded-full border px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
             >
               Historique des mouvements
             </button>
