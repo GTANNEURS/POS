@@ -128,8 +128,8 @@ async function seedCoreData() {
     }),
     prisma.warehouse.upsert({
       where: { code: "DEPOT" },
-      update: { name: "DÃƒÆ’Ã‚Â©pÃƒÆ’Ã‚Â´t Central", isDefault: true },
-      create: { name: "DÃƒÆ’Ã‚Â©pÃƒÆ’Ã‚Â´t Central", code: "DEPOT", type: WarehouseType.WAREHOUSE, isDefault: true }
+      update: { name: "Dépôt Central", isDefault: true },
+      create: { name: "Dépôt Central", code: "DEPOT", type: WarehouseType.WAREHOUSE, isDefault: true }
     })
   ]);
 
@@ -390,3 +390,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

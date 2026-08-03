@@ -1,5 +1,14 @@
-const CACHE_NAME = "gdt-pos-cache-v1";
-const APP_SHELL = ["/", "/login", "/pos", "/offline.html", "/logo-gdt.jpg"];
+const CACHE_NAME = "gdt-pos-cache-v2";
+const APP_SHELL = [
+  "/",
+  "/login",
+  "/pos",
+  "/offline.html",
+  "/logo-gdt.jpg",
+  "/manifest.webmanifest",
+  "/icons/gdt-icon-192.png",
+  "/icons/gdt-icon-512.png"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

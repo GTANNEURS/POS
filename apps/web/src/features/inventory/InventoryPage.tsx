@@ -51,6 +51,16 @@ type NegativeStockRow = {
   minStock: number;
 };
 
+function cleanWarehouseName(value: string) {
+  if (value.includes("Central") && /D.|Ã|�/.test(value)) return "Dépôt Central";
+  return value
+    .replaceAll("D�p�t", "Dépôt")
+    .replaceAll("DÃ©pÃ´t", "Dépôt")
+    .replaceAll("DÃƒÆ’Ã‚Â©pÃƒÆ’Ã‚Â´t", "Dépôt")
+    .replaceAll("DÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©pÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â´t", "Dépôt")
+    .replaceAll("Entrepot", "Entrepôt");
+}
+
 export function InventoryPage() {
   const { user } = useAuth();
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -183,7 +193,7 @@ export function InventoryPage() {
             productName: item.name,
             reference: item.reference,
             warehouseId: location.warehouseId,
-            warehouseName: location.warehouseName,
+            warehouseName: cleanWarehouseName(location.warehouseName),
             warehouseType: location.warehouseType,
             quantity: location.quantity,
             stockOnHand: item.stockOnHand,
@@ -265,12 +275,16 @@ export function InventoryPage() {
   );
   const transferVariantRequired = (selectedTransferProduct?.variants.length ?? 0) > 0 && !transferForm.variantId;
   const currentWarehouseId = user?.defaultWarehouse?.id ?? null;
+  const displayWarehouses = useMemo(
+    () => warehouses.map((warehouse) => ({ ...warehouse, name: cleanWarehouseName(warehouse.name) })),
+    [warehouses]
+  );
   const orderedWarehouses = useMemo(() => {
-    if (!currentWarehouseId) return warehouses;
-    const currentWarehouse = warehouses.find((warehouse) => warehouse.id === currentWarehouseId);
-    const otherWarehouses = warehouses.filter((warehouse) => warehouse.id !== currentWarehouseId);
-    return currentWarehouse ? [currentWarehouse, ...otherWarehouses] : warehouses;
-  }, [currentWarehouseId, warehouses]);
+    if (!currentWarehouseId) return displayWarehouses;
+    const currentWarehouse = displayWarehouses.find((warehouse) => warehouse.id === currentWarehouseId);
+    const otherWarehouses = displayWarehouses.filter((warehouse) => warehouse.id !== currentWarehouseId);
+    return currentWarehouse ? [currentWarehouse, ...otherWarehouses] : displayWarehouses;
+  }, [currentWarehouseId, displayWarehouses]);
   const operationalWarehouses = useMemo(
     () => user?.roles.includes("admin") ? orderedWarehouses : orderedWarehouses.filter((warehouse) => warehouse.id === currentWarehouseId),
     [currentWarehouseId, orderedWarehouses, user?.roles]
@@ -312,8 +326,8 @@ export function InventoryPage() {
     [overview, variantMatrixProductId]
   );
   const selectedVariantMatrixWarehouse = useMemo(
-    () => warehouses.find((warehouse) => warehouse.id === variantMatrixWarehouseId) ?? null,
-    [variantMatrixWarehouseId, warehouses]
+    () => displayWarehouses.find((warehouse) => warehouse.id === variantMatrixWarehouseId) ?? null,
+    [displayWarehouses, variantMatrixWarehouseId]
   );
   const variantMatrixColors = useMemo(() => {
     const variants = selectedVariantMatrixProduct?.variants ?? [];
@@ -480,21 +494,21 @@ export function InventoryPage() {
             <button
               type="button"
               onClick={() => setActiveTab("overview")}
-              className={activeTab === "overview" ? "rounded-full bg-[linear-gradient(135deg,#6d4723,#4a2f18)] px-5 py-2 text-sm font-semibold text-white" : "rounded-full border border-white/10 bg-black/20 px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
+              className={activeTab === "overview" ? "app-menu-button app-menu-button-active rounded-full border px-5 py-2 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle rounded-full border px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
             >
               Stock par emplacement
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("negative")}
-              className={activeTab === "negative" ? "rounded-full bg-[linear-gradient(135deg,#6d4723,#4a2f18)] px-5 py-2 text-sm font-semibold text-white" : "rounded-full border border-white/10 bg-black/20 px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
+              className={activeTab === "negative" ? "app-menu-button app-menu-button-active rounded-full border px-5 py-2 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle rounded-full border px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
             >
               Stock negatif
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("movements")}
-              className={activeTab === "movements" ? "rounded-full bg-[linear-gradient(135deg,#6d4723,#4a2f18)] px-5 py-2 text-sm font-semibold text-white" : "rounded-full border border-white/10 bg-black/20 px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
+              className={activeTab === "movements" ? "app-menu-button app-menu-button-active rounded-full border px-5 py-2 text-sm font-semibold text-white" : "app-menu-button app-menu-button-idle rounded-full border px-5 py-2 text-sm font-medium text-[#d4c1b1]"}
             >
               Historique des mouvements
             </button>
@@ -756,7 +770,7 @@ export function InventoryPage() {
                           <div className="font-medium text-white">{movement.product.name}</div>
                           <div className="mt-1 text-xs text-[#baa999]">{movement.notes ?? "Sans note"}</div>
                         </td>
-                        <td>{movement.warehouse.name}</td>
+                        <td>{cleanWarehouseName(movement.warehouse.name)}</td>
                         <td><Badge tone={movement.type === "OUT" || movement.type === "TRANSFER_OUT" ? "danger" : movement.type === "ADJUSTMENT" ? "warning" : "success"}>{movement.type}</Badge></td>
                         <td>{formatNumber(movement.quantity)}</td>
                         <td>{formatNumber(movement.beforeStock)}{" -> "}{formatNumber(movement.afterStock)}</td>

@@ -1174,8 +1174,19 @@ export function ProductsPage() {
                         onKeyDown={(event) => handleRowKeyDown(event, item.id)}
                       >
                         <td>
-                          <div className="font-medium text-white">{item.name}</div>
-                          <div className="mt-1 text-xs text-[#b9aa9b]">{item.category?.name ?? "Sans categorie"} - {item.brand?.name ?? "Sans marque"}</div>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                              {item.imageUrl ? (
+                                <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
+                              ) : (
+                                <span className="text-sm font-semibold uppercase text-[#bba999]">{item.name.slice(0, 1) || "A"}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-white">{item.name}</div>
+                              <div className="mt-1 truncate text-xs text-[#b9aa9b]">{item.category?.name ?? "Sans categorie"} - {item.brand?.name ?? "Sans marque"}</div>
+                            </div>
+                          </div>
                         </td>
                         <td>
                           <div>{item.reference}</div>

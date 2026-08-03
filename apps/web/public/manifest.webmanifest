@@ -1,0 +1,26 @@
+{
+  "name": "Galerie des Tanneurs POS",
+  "short_name": "GDT POS",
+  "description": "Application de caisse et gestion commerciale Galerie des Tanneurs.",
+  "start_url": "/login",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f7efe2",
+  "theme_color": "#ff8a1f",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/gdt-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/gdt-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
