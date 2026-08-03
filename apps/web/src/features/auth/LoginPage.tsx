@@ -35,9 +35,9 @@ export function LoginPage() {
   const [commandError, setCommandError] = useState<string | null>(null);
 
   const title = useMemo(() => {
-    if (mode === "admin") return "Accès administrateur";
-    if (mode === "manager") return "Accès manager boutique";
-    return "Accès caisse rapide";
+    if (mode === "admin") return "Accès Administrateurs";
+    if (mode === "manager") return "Accès Managers";
+    return "Accès Caisse";
   }, [mode]);
 
   function appendCashierDigit(value: string) {
@@ -156,11 +156,11 @@ export function LoginPage() {
                 setCommandError(null);
               }}
             >
-              <p className="text-sm font-semibold text-white">Gestion Commandes</p>
+              <p className="text-sm font-semibold text-white">Espace Gestion Commandes</p>
             </button>
             {[
-              { label: "Manager", detail: "Utilisateur + mot de passe" },
-              { label: "Caissier", detail: "Code confidentiel" }
+              { label: "Espace Comptable", detail: "" },
+              { label: "Espace Clients", detail: "" }
             ].map((item) => (
               <div key={item.label} className="rounded-[22px] border border-white/10 bg-black/20 p-4">
                 <p className="text-sm font-semibold text-white">{item.label}</p>
