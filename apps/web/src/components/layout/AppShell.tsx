@@ -2127,10 +2127,10 @@ export function AppShell() {
                         <button
                           type="button"
                           className={cn(
-                            "flex w-full items-center gap-3 rounded-[24px] border px-4 py-2.5 text-left text-sm font-semibold transition",
+                            "app-menu-button flex w-full items-center gap-3 rounded-[24px] border px-4 py-2.5 text-left text-sm font-semibold transition",
                             activeGroup || openGroup
-                              ? "border-orange-300/30 bg-gradient-to-r from-orange-300/25 to-orange-500/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
-                              : "border-white/10 bg-black/25 text-[#f3e8dc] hover:bg-white/5"
+                              ? "app-menu-button-active border-orange-300/30 bg-gradient-to-r from-orange-300/25 to-orange-500/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
+                              : "app-menu-button-idle border-white/10 bg-black/25 text-[#f3e8dc] hover:bg-white/5"
                           )}
                           onClick={() => setOpenMenus((current) => ({ ...current, [item.label]: !current[item.label] }))}
                         >
@@ -2151,10 +2151,10 @@ export function AppShell() {
                                   key={child.label}
                                   to={child.to!}
                                   className={cn(
-                                    "flex items-center gap-2.5 rounded-2xl px-3 py-1.5 text-[12px] transition",
+                                    "app-submenu-link flex items-center gap-2.5 rounded-2xl px-3 py-1.5 text-[12px] transition",
                                     active
-                                      ? "bg-gradient-to-r from-orange-300/20 to-orange-500/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
-                                      : "text-[#c9bbad] hover:bg-white/5 hover:text-white"
+                                      ? "app-submenu-link-active bg-gradient-to-r from-orange-300/20 to-orange-500/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
+                                      : "app-submenu-link-idle text-[#c9bbad] hover:bg-white/5 hover:text-white"
                                   )}
                                   >
                                     <Icon className="h-3.5 w-3.5" />
@@ -2173,10 +2173,10 @@ export function AppShell() {
                       to={item.to}
                       className={({ isActive }) =>
                         cn(
-                          "flex items-center gap-3 rounded-[24px] border px-4 py-2.5 text-sm font-medium transition",
+                          "app-menu-button flex items-center gap-3 rounded-[24px] border px-4 py-2.5 text-sm font-medium transition",
                           isActive
-                            ? "border-orange-300/30 bg-gradient-to-r from-orange-300/25 to-orange-500/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
-                            : "border-white/10 bg-black/25 text-[#c9bbad] hover:bg-white/5 hover:text-white"
+                            ? "app-menu-button-active border-orange-300/30 bg-gradient-to-r from-orange-300/25 to-orange-500/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
+                            : "app-menu-button-idle border-white/10 bg-black/25 text-[#c9bbad] hover:bg-white/5 hover:text-white"
                         )
                       }
                     >

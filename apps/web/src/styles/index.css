@@ -377,3 +377,83 @@ html[data-theme="light"] .via-orange-400\/10 {
   --tw-gradient-to: rgba(255, 138, 31, 0) var(--tw-gradient-to-position) !important;
   --tw-gradient-stops: var(--tw-gradient-from), rgba(255, 138, 31, 0.10) var(--tw-gradient-via-position), var(--tw-gradient-to) !important;
 }
+
+html[data-theme="light"] aside,
+html[data-theme="light"] main,
+html[data-theme="light"] header,
+html[data-theme="light"] section,
+html[data-theme="light"] label,
+html[data-theme="light"] p,
+html[data-theme="light"] span,
+html[data-theme="light"] h1,
+html[data-theme="light"] h2,
+html[data-theme="light"] h3,
+html[data-theme="light"] h4,
+html[data-theme="light"] th,
+html[data-theme="light"] td {
+  color: var(--gdt-leather-dark);
+}
+
+html[data-theme="light"] .app-menu-button {
+  color: var(--gdt-leather-dark) !important;
+}
+
+html[data-theme="light"] .app-menu-button svg,
+html[data-theme="light"] .app-submenu-link svg {
+  color: #9b5a26 !important;
+  stroke-width: 2.25;
+}
+
+html[data-theme="light"] .app-menu-button-idle {
+  border-color: rgba(255, 138, 31, 0.24) !important;
+  background:
+    linear-gradient(90deg, rgba(255, 231, 202, 0.92), rgba(247, 222, 192, 0.74)),
+    radial-gradient(circle at 88% 50%, rgba(255, 255, 255, 0.54), transparent 34%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 10px 24px rgba(88, 57, 32, 0.07);
+}
+
+html[data-theme="light"] .app-menu-button-idle:hover,
+html[data-theme="light"] .app-menu-button-active,
+html[data-theme="light"] .app-menu-button-active:hover {
+  border-color: rgba(169, 86, 24, 0.42) !important;
+  color: var(--gdt-leather-dark) !important;
+  background:
+    linear-gradient(90deg, #ffb66d 0%, #ff942f 56%, #e97816 100%) !important;
+  box-shadow:
+    0 15px 30px rgba(120, 67, 31, 0.22),
+    inset 0 1px 0 rgba(255, 232, 204, 0.62);
+  transform: translateY(-1px);
+}
+
+html[data-theme="light"] .app-menu-button-active svg,
+html[data-theme="light"] .app-menu-button-idle:hover svg {
+  color: var(--gdt-brown) !important;
+}
+
+html[data-theme="light"] .app-submenu-link {
+  color: var(--gdt-brown) !important;
+}
+
+html[data-theme="light"] .app-submenu-link-idle {
+  background: transparent !important;
+}
+
+html[data-theme="light"] .app-submenu-link-idle:hover,
+html[data-theme="light"] .app-submenu-link-active,
+html[data-theme="light"] .app-submenu-link-active:hover {
+  color: var(--gdt-leather-dark) !important;
+  background:
+    linear-gradient(90deg, rgba(255, 182, 109, 0.88), rgba(255, 148, 47, 0.72)) !important;
+  box-shadow:
+    0 10px 22px rgba(120, 67, 31, 0.14),
+    inset 0 1px 0 rgba(255, 232, 204, 0.55);
+}
+
+html[data-theme="light"] .text-white\/70,
+html[data-theme="light"] .text-white\/60,
+html[data-theme="light"] .text-white\/55,
+html[data-theme="light"] .text-white\/50 {
+  color: var(--gdt-taupe) !important;
+}
