@@ -3052,7 +3052,7 @@ export function AppShell() {
                 <div className="flex h-[min(88vh,980px)] w-full max-w-[1600px] flex-col overflow-hidden rounded-[30px] border border-cyan-300/20 bg-[linear-gradient(160deg,rgba(6,19,29,0.98),rgba(11,27,38,0.98))] p-4 shadow-[0_32px_110px_rgba(0,0,0,0.5)] md:p-5">
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">POS / Detaxe</p>
+                      <p className="pos-detax-kicker text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">POS / Detaxe</p>
                       <h2 className="mt-1 text-2xl font-semibold text-white">Detaxe</h2>
                     </div>
                     <button
@@ -3147,7 +3147,7 @@ export function AppShell() {
                   </div>
 
                   {ticketActionMessage ? (
-                    <div className="mb-4 rounded-[18px] border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">
+                    <div className="pos-detax-toast mb-4 rounded-[18px] border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">
                       {ticketActionMessage}
                     </div>
                   ) : null}
@@ -3179,7 +3179,7 @@ export function AppShell() {
                     ) : (
                       <div className="h-full overflow-auto rounded-[22px] border border-cyan-300/15 bg-black/20">
                         <table className="min-w-full text-sm text-[#eadfd4]">
-                          <thead className="sticky top-0 bg-[#102433] text-xs uppercase tracking-[0.18em] text-cyan-100/80">
+                          <thead className="pos-detax-table-head sticky top-0 bg-[#102433] text-xs uppercase tracking-[0.18em] text-cyan-100/80">
                             <tr>
                               <th className="w-[74px] px-4 py-3 text-left">Choix</th>
                               <th className="px-4 py-3 text-left">Detaxe</th>
@@ -3236,7 +3236,7 @@ export function AppShell() {
                 <div className="relative flex h-[min(88vh,920px)] w-full max-w-[1440px] flex-col overflow-hidden rounded-[30px] border border-cyan-300/20 bg-[linear-gradient(160deg,rgba(7,21,33,0.98),rgba(8,30,43,0.98))] p-4 shadow-[0_32px_110px_rgba(0,0,0,0.56)] md:p-5">
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">POS / Detaxe</p>
+                      <p className="pos-detax-kicker text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">POS / Detaxe</p>
                       <h2 className="mt-1 text-2xl font-semibold text-white">Nouveau ticket detaxe</h2>
                     </div>
                     <button
@@ -3249,7 +3249,7 @@ export function AppShell() {
                   </div>
 
                   {ticketActionMessage ? (
-                    <div className="pointer-events-none absolute right-5 top-20 z-10 max-w-[520px] rounded-[18px] border border-cyan-300/25 bg-[#103245]/95 px-4 py-3 text-sm text-cyan-50 shadow-[0_16px_50px_rgba(0,0,0,0.35)] backdrop-blur-sm">
+                    <div className="pos-detax-toast pointer-events-none absolute right-5 top-20 z-10 max-w-[520px] rounded-[18px] border border-cyan-300/25 bg-[#103245]/95 px-4 py-3 text-sm text-cyan-50 shadow-[0_16px_50px_rgba(0,0,0,0.35)] backdrop-blur-sm">
                       {ticketActionMessage}
                     </div>
                   ) : null}
@@ -3334,7 +3334,7 @@ export function AppShell() {
                           </button>
                         </div>
 
-                        <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-[20px] border border-cyan-300/15 bg-[#081722]/80 p-3">
+                        <div className="pos-detax-loaded-tickets mt-4 min-h-0 flex-1 overflow-auto rounded-[20px] border border-cyan-300/15 bg-[#081722]/80 p-3">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/75">Tickets charges</p>
                           <div className="mt-3 space-y-2">
                             {detaxPreview?.sourceTickets?.length ? detaxPreview.sourceTickets.map((ticket) => (
@@ -3409,7 +3409,7 @@ export function AppShell() {
                             <div className="rounded-[22px] border border-cyan-300/15 bg-[#0d1821]">
                               <div className="max-h-[340px] overflow-auto">
                                 <table className="min-w-full text-sm text-[#eadfd4]">
-                                  <thead className="sticky top-0 bg-[#102433] text-xs uppercase tracking-[0.18em] text-cyan-100/80">
+                                  <thead className="pos-detax-table-head sticky top-0 bg-[#102433] text-xs uppercase tracking-[0.18em] text-cyan-100/80">
                                     <tr>
                                       <th className="px-4 py-3 text-left">Reference</th>
                                       <th className="px-4 py-3 text-left">Article</th>
