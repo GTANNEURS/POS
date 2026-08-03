@@ -289,7 +289,7 @@ export function LoginPage() {
                     <div className="relative max-w-[330px]">
                       <ScanLine className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#bba995]" />
                       <Input
-                        className="h-12 rounded-[18px] pl-11 text-lg tracking-[0.18em]"
+                        className="login-cashier-code-input h-12 rounded-[18px] pl-11 text-lg tracking-[0.18em]"
                         value={code}
                   onChange={(event) => {
                     const parsed = normalizeScanValue(event.target.value);
@@ -307,10 +307,10 @@ export function LoginPage() {
                     </div>
                   </label>
 
-                  <div className="max-w-[330px] rounded-[26px] border border-orange-300/20 bg-[linear-gradient(145deg,rgba(255,255,255,0.07),rgba(32,20,13,0.72))] p-3.5 shadow-[0_20px_48px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.10)]">
+                  <div className="login-cashier-keypad max-w-[330px] rounded-[26px] border border-orange-300/20 p-3.5">
                     <div className="mb-3 flex items-center justify-between gap-3 px-1">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-orange-200/80">Saisie tactile</span>
-                      <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-[#dbcab8]">
+                      <span className="login-cashier-keypad-title text-[10px] font-semibold uppercase tracking-[0.24em] text-orange-200/80">Saisie tactile</span>
+                      <span className="login-cashier-keypad-status rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-[#dbcab8]">
                         {code ? `${code.length} chiffre(s)` : "Prêt"}
                       </span>
                     </div>
@@ -319,12 +319,12 @@ export function LoginPage() {
                         <button
                           key={key}
                           type="button"
-                          className={`rounded-[18px] border px-2 py-3 text-sm font-semibold shadow-[0_10px_20px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.10)] transition duration-150 hover:-translate-y-0.5 active:scale-[0.98] ${
+                          className={`login-cashier-key rounded-[18px] border px-2 py-3 text-sm font-semibold transition duration-150 hover:-translate-y-0.5 active:scale-[0.98] ${
                             key === "Effacer"
-                              ? "border-rose-300/35 bg-[linear-gradient(145deg,rgba(225,29,72,0.92),rgba(127,29,29,0.92))] text-white hover:border-rose-200/60 hover:shadow-[0_14px_26px_rgba(190,18,60,0.28)]"
+                              ? "login-cashier-key-danger"
                               : key === "Corriger"
-                                ? "border-white/10 bg-[linear-gradient(145deg,rgba(255,255,255,0.10),rgba(92,64,42,0.32))] text-[#efe2d4] hover:border-orange-300/30 hover:bg-[linear-gradient(145deg,rgba(255,186,104,0.18),rgba(92,64,42,0.38))]"
-                                : "border-orange-300/20 bg-[linear-gradient(145deg,rgba(70,45,29,0.88),rgba(23,17,12,0.96))] text-white hover:border-orange-300/40 hover:bg-[linear-gradient(145deg,rgba(255,151,43,0.25),rgba(45,28,17,0.98))] hover:shadow-[0_14px_28px_rgba(255,127,24,0.12)]"
+                                ? "login-cashier-key-muted"
+                                : "login-cashier-key-number"
                           }`}
                           onClick={() => {
                             if (key === "Effacer") {
@@ -357,11 +357,11 @@ export function LoginPage() {
       </div>
 
       {commandAccessOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-md">
-          <div className="w-full max-w-[560px] overflow-hidden rounded-[32px] border border-orange-300/25 bg-[linear-gradient(145deg,rgba(34,24,17,0.98),rgba(18,13,10,0.98)_58%,rgba(84,48,21,0.92))] p-5 shadow-[0_34px_100px_rgba(0,0,0,0.52),inset_0_1px_0_rgba(255,255,255,0.10)]">
+        <div className="login-command-overlay fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-md">
+          <div className="login-command-modal w-full max-w-[560px] overflow-hidden rounded-[32px] border border-orange-300/25 p-5">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-[18px] border border-orange-200/20 bg-[linear-gradient(145deg,#ffb66d,#ff7f18)] text-[#241409] shadow-[0_16px_34px_rgba(255,127,24,0.24),inset_0_1px_0_rgba(255,255,255,0.35)]">
+                <div className="login-command-icon mb-3 flex h-12 w-12 items-center justify-center rounded-[18px] border border-orange-200/20 text-[#241409]">
                   <ClipboardList className="h-6 w-6" />
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">Gestion commandes</p>
@@ -372,15 +372,15 @@ export function LoginPage() {
               </div>
               <button
                 type="button"
-                className="rounded-full border border-white/10 bg-white/5 p-2 text-[#d8c8b8] shadow-inner transition hover:border-orange-300/30 hover:bg-orange-300/10 hover:text-orange-100"
+                className="login-command-close rounded-full border border-white/10 bg-white/5 p-2 text-[#d8c8b8] shadow-inner transition hover:border-orange-300/30 hover:bg-orange-300/10 hover:text-orange-100"
                 onClick={() => setCommandAccessOpen(false)}
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form className="space-y-4 rounded-[26px] border border-white/10 bg-black/20 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]" onSubmit={submitCommandAccess}>
-              <label className="block space-y-2 rounded-[20px] border border-white/10 bg-white/[0.03] p-3">
+            <form className="login-command-form space-y-4 rounded-[26px] border border-white/10 p-4" onSubmit={submitCommandAccess}>
+              <label className="login-command-field block space-y-2 rounded-[20px] border border-white/10 p-3">
                 <span className="text-sm font-medium text-[#eadccf]">Identifiant opérateur</span>
                 <div className="relative">
                   <UserRound className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#bba995]" />
@@ -393,7 +393,7 @@ export function LoginPage() {
                 </div>
               </label>
 
-              <label className="block space-y-2 rounded-[20px] border border-white/10 bg-white/[0.03] p-3">
+              <label className="login-command-field block space-y-2 rounded-[20px] border border-white/10 p-3">
                 <span className="text-sm font-medium text-[#eadccf]">Mot de passe</span>
                 <div className="relative">
                   <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#bba995]" />
@@ -409,7 +409,7 @@ export function LoginPage() {
               {commandError ? <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">{commandError}</div> : null}
 
               <div className="flex justify-end gap-3 pt-1">
-                <Button type="button" variant="secondary" className="!border-white/10 !bg-white/5 !text-white hover:!border-orange-300/30 hover:!bg-orange-300/10" onClick={() => setCommandAccessOpen(false)}>
+                <Button type="button" variant="secondary" className="login-command-cancel !border-white/10 !bg-white/5 !text-white hover:!border-orange-300/30 hover:!bg-orange-300/10" onClick={() => setCommandAccessOpen(false)}>
                   Annuler
                 </Button>
                 <Button type="submit" className="shadow-[0_16px_34px_rgba(255,127,24,0.22)]" disabled={commandLoading}>
