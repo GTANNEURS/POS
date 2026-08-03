@@ -10,8 +10,190 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/gdt-icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/gdt-icon-192.png" />
     <title>GDT Suite</title>
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("gdt_app_theme_v1");
+          document.documentElement.dataset.theme = theme === "light" ? "light" : "dark";
+        } catch (error) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
+    <style>
+      :root {
+        --splash-bg: #110f0d;
+        --splash-panel: rgba(31, 23, 18, 0.92);
+        --splash-border: rgba(255, 177, 92, 0.22);
+        --splash-text: #fff7ee;
+        --splash-muted: #d8c8b8;
+        --splash-track: rgba(255, 255, 255, 0.10);
+        --splash-orange: #ff8a1f;
+      }
+
+      html[data-theme="light"] {
+        --splash-bg: #f5eadb;
+        --splash-panel: rgba(255, 248, 236, 0.94);
+        --splash-border: rgba(143, 84, 36, 0.24);
+        --splash-text: #2d1b10;
+        --splash-muted: #70513b;
+        --splash-track: rgba(88, 57, 32, 0.12);
+        --splash-orange: #ff8a1f;
+      }
+
+      body {
+        background:
+          radial-gradient(circle at 50% 20%, rgba(255, 138, 31, 0.18), transparent 34%),
+          var(--splash-bg);
+      }
+
+      #gdt-boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 50% 18%, rgba(255, 138, 31, 0.18), transparent 34%),
+          linear-gradient(145deg, var(--splash-bg), rgba(45, 28, 17, 0.92));
+        opacity: 1;
+        transition: opacity 420ms ease, visibility 420ms ease;
+      }
+
+      html[data-theme="light"] #gdt-boot-splash {
+        background:
+          radial-gradient(circle at 50% 18%, rgba(255, 151, 43, 0.24), transparent 34%),
+          linear-gradient(145deg, #fff7ea, #ead4b9);
+      }
+
+      .gdt-boot-card {
+        width: min(360px, 92vw);
+        border: 1px solid var(--splash-border);
+        border-radius: 34px;
+        background:
+          radial-gradient(circle at 86% 8%, rgba(255, 138, 31, 0.18), transparent 34%),
+          var(--splash-panel);
+        padding: 30px 28px;
+        text-align: center;
+        box-shadow:
+          0 30px 90px rgba(0, 0, 0, 0.28),
+          inset 0 1px 0 rgba(255, 255, 255, 0.16);
+        backdrop-filter: blur(18px);
+      }
+
+      .gdt-boot-logo {
+        display: grid;
+        place-items: center;
+        width: 94px;
+        height: 94px;
+        margin: 0 auto;
+        border-radius: 30px;
+        background: linear-gradient(145deg, #ffbd75, #ff8018);
+        box-shadow:
+          0 18px 44px rgba(255, 127, 24, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.38);
+        animation: gdt-logo-pulse 1.25s ease-in-out infinite;
+      }
+
+      .gdt-boot-logo img {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+        mix-blend-mode: multiply;
+        filter: contrast(1.12);
+      }
+
+      .gdt-boot-title {
+        margin: 20px 0 0;
+        color: var(--splash-text);
+        font: 800 20px/1.2 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0.04em;
+      }
+
+      .gdt-boot-subtitle {
+        margin: 8px 0 0;
+        color: var(--splash-muted);
+        font: 600 12px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+
+      .gdt-boot-progress {
+        position: relative;
+        overflow: hidden;
+        height: 9px;
+        margin-top: 24px;
+        border-radius: 999px;
+        background: var(--splash-track);
+      }
+
+      .gdt-boot-progress::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 42%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #ffb66d, var(--splash-orange), #ff6b00);
+        box-shadow: 0 0 24px rgba(255, 138, 31, 0.48);
+        animation: gdt-progress-slide 1.1s ease-in-out infinite;
+      }
+
+      .gdt-boot-hint {
+        margin-top: 14px;
+        color: var(--splash-muted);
+        font: 500 12px/1.4 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body.gdt-app-ready #gdt-boot-splash {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      @keyframes gdt-logo-pulse {
+        0%, 100% {
+          transform: scale(1);
+          filter: brightness(1);
+        }
+        50% {
+          transform: scale(1.045);
+          filter: brightness(1.14);
+        }
+      }
+
+      @keyframes gdt-progress-slide {
+        0% {
+          transform: translateX(-105%);
+        }
+        55% {
+          transform: translateX(88%);
+        }
+        100% {
+          transform: translateX(245%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .gdt-boot-logo,
+        .gdt-boot-progress::before {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body class="bg-[#110f0d]">
+    <div id="gdt-boot-splash" aria-label="Chargement Galerie des Tanneurs">
+      <div class="gdt-boot-card">
+        <div class="gdt-boot-logo">
+          <img src="/logo-gdt.jpg" alt="GDT" />
+        </div>
+        <p class="gdt-boot-title">Galerie des Tanneurs</p>
+        <p class="gdt-boot-subtitle">GDT Suite</p>
+        <div class="gdt-boot-progress" aria-hidden="true"></div>
+        <p class="gdt-boot-hint">Chargement de votre espace...</p>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

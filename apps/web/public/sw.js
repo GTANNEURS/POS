@@ -1,4 +1,4 @@
-const CACHE_NAME = "gdt-pos-cache-v2";
+const CACHE_NAME = "gdt-pos-cache-v3";
 const APP_SHELL = [
   "/",
   "/login",

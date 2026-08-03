@@ -15,6 +15,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </React.StrictMode>
 );
 
+window.setTimeout(() => {
+  document.body.classList.add("gdt-app-ready");
+}, 450);
+
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     void navigator.serviceWorker.register("/sw.js");
