@@ -17,7 +17,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 
 window.setTimeout(() => {
   document.body.classList.add("gdt-app-ready");
-}, 5000);
+}, 10000);
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
