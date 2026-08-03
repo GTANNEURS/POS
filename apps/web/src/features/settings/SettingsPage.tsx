@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../../lib/api";
+import { getStoredTheme, saveTheme, type AppTheme } from "../../lib/theme";
 import { Button, Field, Input, LoadingBlock, PageHeader, SectionCard, Textarea } from "../../components/ui/primitives";
 
 type SettingRow = { key: string; value: string };
@@ -246,6 +247,7 @@ function ReferenceTab({
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("societe");
+  const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -343,6 +345,12 @@ export function SettingsPage() {
       return "Le nouveau mot de passe doit contenir au moins 6 caracteres.";
     }
     return null;
+  }
+
+  function changeTheme(nextTheme: AppTheme) {
+    setTheme(nextTheme);
+    saveTheme(nextTheme);
+    setMessage(nextTheme === "light" ? "Theme clair active." : "Theme sombre active.");
   }
 
   async function load() {
@@ -1100,6 +1108,30 @@ export function SettingsPage() {
 
       {activeTab === "societe" ? (
         <SectionCard title="Societe">
+          <div className="mb-5 rounded-[24px] border border-white/10 bg-black/20 p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/80">Theme interface</p>
+                <p className="mt-1 text-sm text-[#cdbfb1]">Choisir l'affichage de l'application sur ce poste.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 rounded-[20px] border border-white/10 bg-black/20 p-1.5 sm:min-w-[320px]">
+                <button
+                  type="button"
+                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${theme === "dark" ? "bg-orange-300 text-black" : "text-[#e9dccc] hover:bg-white/5"}`}
+                  onClick={() => changeTheme("dark")}
+                >
+                  Mode sombre
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${theme === "light" ? "bg-orange-300 text-black" : "text-[#e9dccc] hover:bg-white/5"}`}
+                  onClick={() => changeTheme("light")}
+                >
+                  Mode clair
+                </button>
+              </div>
+            </div>
+          </div>
           <form className="grid gap-4 xl:grid-cols-2" onSubmit={submit}>
             <Field label="Nom societe"><Input value={form.company_name} onChange={(e) => setForm((current) => ({ ...current, company_name: e.target.value }))} /></Field>
             <Field label="Logo URL"><Input value={form.company_logo_url} onChange={(e) => setForm((current) => ({ ...current, company_logo_url: e.target.value }))} placeholder="https://.../logo.png" /></Field>
