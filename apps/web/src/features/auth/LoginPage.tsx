@@ -35,9 +35,9 @@ export function LoginPage() {
   const [commandError, setCommandError] = useState<string | null>(null);
 
   const title = useMemo(() => {
-    if (mode === "admin") return "Acces administrateur";
-    if (mode === "manager") return "Acces manager boutique";
-    return "Acces caisse rapide";
+    if (mode === "admin") return "Accès administrateur";
+    if (mode === "manager") return "Accès manager boutique";
+    return "Accès caisse rapide";
   }, [mode]);
 
   function appendCashierDigit(value: string) {
@@ -100,7 +100,7 @@ export function LoginPage() {
     try {
       const identifier = commandIdentifier.trim();
       if (!identifier || !commandPassword.trim()) {
-        throw new Error("Remplis l'identifiant operateur et le mot de passe.");
+        throw new Error("Remplis l'identifiant opérateur et le mot de passe.");
       }
 
       const credentials = identifier.includes("@")
@@ -110,7 +110,7 @@ export function LoginPage() {
       const user = await login(credentials, { scope: "command_validation" });
       if (!(user.permissions ?? []).includes("sales_manage")) {
         await logout();
-        throw new Error("Cet operateur n'a pas l'acces requis pour valider les commandes.");
+        throw new Error("Cet opérateur n'a pas l'accès requis pour valider les commandes.");
       }
 
       setCommandAccessOpen(false);
@@ -145,7 +145,7 @@ export function LoginPage() {
             Bienvenue.
             <br />
             <br />
-            Veuillez vous identifier pour acceder a votre espace de travail. Chaque profil beneficie d'un acces securise adapte a ses fonctions afin d'assurer une gestion fiable des ventes, des stocks et des operations quotidiennes.
+            Veuillez vous identifier pour accéder à votre espace de travail. Chaque profil bénéficie d'un accès sécurisé adapté à ses fonctions afin d'assurer une gestion fiable des ventes, des stocks et des opérations quotidiennes.
           </p>
           <div className="mt-8 grid grid-cols-3 gap-4">
             <button
@@ -156,7 +156,7 @@ export function LoginPage() {
                 setCommandError(null);
               }}
             >
-              <p className="text-sm font-semibold text-white">Gestion commandes</p>
+              <p className="text-sm font-semibold text-white">Gestion Commandes</p>
             </button>
             {[
               { label: "Manager", detail: "Utilisateur + mot de passe" },
@@ -332,9 +332,9 @@ export function LoginPage() {
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">Gestion commandes</p>
-                <h3 className="mt-2 text-2xl font-semibold text-white">Identification operateur</h3>
+                <h3 className="mt-2 text-2xl font-semibold text-white">Identification opérateur</h3>
                 <p className="mt-2 text-sm leading-6 text-[#cfbfaf]">
-                  Cet acces ouvre uniquement la page <strong className="text-white">Commandes non validees</strong> pour valider les commandes.
+                  Cet accès ouvre uniquement la page <strong className="text-white">Commandes non validees</strong> pour valider les commandes.
                 </p>
               </div>
               <button
@@ -348,14 +348,14 @@ export function LoginPage() {
 
             <form className="space-y-5" onSubmit={submitCommandAccess}>
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-[#eadccf]">Identifiant operateur</span>
+                <span className="text-sm font-medium text-[#eadccf]">Identifiant opérateur</span>
                 <div className="relative">
                   <UserRound className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#bba995]" />
                   <Input
                     className="pl-11"
                     value={commandIdentifier}
                     onChange={(event) => setCommandIdentifier(event.target.value)}
-                    placeholder="Identifiant operateur"
+                    placeholder="Identifiant opérateur"
                   />
                 </div>
               </label>
