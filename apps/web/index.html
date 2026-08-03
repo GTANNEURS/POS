@@ -131,12 +131,14 @@
       .gdt-boot-progress::before {
         content: "";
         position: absolute;
-        inset: 0 auto 0 0;
-        width: 42%;
+        inset: 0;
+        width: 100%;
         border-radius: inherit;
         background: linear-gradient(90deg, #ffb66d, var(--splash-orange), #ff6b00);
         box-shadow: 0 0 24px rgba(255, 138, 31, 0.48);
-        animation: gdt-progress-slide 1.1s ease-in-out infinite;
+        transform: scaleX(0);
+        transform-origin: left center;
+        animation: gdt-progress-fill 5s linear forwards;
       }
 
       .gdt-boot-hint {
@@ -162,15 +164,12 @@
         }
       }
 
-      @keyframes gdt-progress-slide {
+      @keyframes gdt-progress-fill {
         0% {
-          transform: translateX(-105%);
-        }
-        55% {
-          transform: translateX(88%);
+          transform: scaleX(0);
         }
         100% {
-          transform: translateX(245%);
+          transform: scaleX(1);
         }
       }
 
