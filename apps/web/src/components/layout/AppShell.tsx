@@ -3495,27 +3495,27 @@ export function AppShell() {
                           </div>
 
                           <div className="mt-4 grid gap-2 md:grid-cols-4">
-                            <div className="rounded-[18px] border border-cyan-300/15 bg-white/5 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.16em] text-[#cdbfaf]">Total HT</p>
-                              <p className="mt-1.5 text-[13px] font-semibold text-white">
+                            <div className="rounded-[14px] border border-cyan-300/15 bg-white/5 px-2.5 py-2">
+                              <p className="text-[9px] uppercase tracking-[0.14em] text-[#cdbfaf]">Total HT</p>
+                              <p className="mt-1 text-[11px] font-semibold text-white">
                                 {formatMad(detaxDraftItems.reduce((sum, item) => sum + item.lineTotal / (1 + item.taxRate / 100), 0))}
                               </p>
                             </div>
-                            <div className="rounded-[18px] border border-cyan-300/15 bg-white/5 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.16em] text-[#cdbfaf]">TVA</p>
-                              <p className="mt-1.5 text-[13px] font-semibold text-white">
+                            <div className="rounded-[14px] border border-cyan-300/15 bg-white/5 px-2.5 py-2">
+                              <p className="text-[9px] uppercase tracking-[0.14em] text-[#cdbfaf]">TVA</p>
+                              <p className="mt-1 text-[11px] font-semibold text-white">
                                 {formatMad(detaxDraftItems.reduce((sum, item) => sum + (item.lineTotal - item.lineTotal / (1 + item.taxRate / 100)), 0))}
                               </p>
                             </div>
-                            <div className="rounded-[18px] border border-cyan-300/15 bg-white/5 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.16em] text-[#cdbfaf]">Total TTC</p>
-                              <p className="mt-1.5 text-[13px] font-semibold text-white">
+                            <div className="rounded-[14px] border border-cyan-300/15 bg-white/5 px-2.5 py-2">
+                              <p className="text-[9px] uppercase tracking-[0.14em] text-[#cdbfaf]">Total TTC</p>
+                              <p className="mt-1 text-[11px] font-semibold text-white">
                                 {formatMad(detaxDraftItems.reduce((sum, item) => sum + item.lineTotal, 0))}
                               </p>
                             </div>
-                            <div className="rounded-[18px] border border-emerald-300/20 bg-emerald-300/10 p-3">
-                              <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-100/80">Montant du remboursement</p>
-                              <p className="mt-1.5 text-[13px] font-semibold text-emerald-50">
+                            <div className="rounded-[14px] border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-2">
+                              <p className="text-[9px] uppercase tracking-[0.14em] text-emerald-100/80">Remboursement</p>
+                              <p className="mt-1 text-[11px] font-semibold text-emerald-50">
                                 {formatMad(detaxDraftItems.reduce((sum, item) => sum + item.lineTotal, 0) * 0.13)}
                               </p>
                             </div>
