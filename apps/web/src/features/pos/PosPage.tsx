@@ -752,10 +752,14 @@ export function PosPage() {
     [cashReportData]
   );
   const paymentCurrency = useMemo(() => currencies.find((currency) => currency.id === currencyId) ?? currencies.find((currency) => currency.code !== "MAD") ?? currencies[0] ?? null, [currencies, currencyId]);
-  const currencyDueAmount = useMemo(() => paymentCurrency ? remainingToPay * Number(paymentCurrency.rateFromMad || 1) : 0, [remainingToPay, paymentCurrency]);
+  const currencyAmountToPayMad = useMemo(() => {
+    const draftAmount = Number(paymentDraft || 0);
+    return Number(Math.max(0, draftAmount > 0 ? draftAmount : remainingToPay).toFixed(2));
+  }, [paymentDraft, remainingToPay]);
+  const currencyDueAmount = useMemo(() => paymentCurrency ? currencyAmountToPayMad * Number(paymentCurrency.rateFromMad || 1) : 0, [currencyAmountToPayMad, paymentCurrency]);
   const currencyTenderAmount = useMemo(() => Number(currencyTenderDraft || 0), [currencyTenderDraft]);
   const currencyTenderMad = useMemo(() => paymentCurrency && Number(paymentCurrency.rateFromMad) > 0 ? currencyTenderAmount / Number(paymentCurrency.rateFromMad) : 0, [paymentCurrency, currencyTenderAmount]);
-  const currencyChangeMad = useMemo(() => Math.max(0, currencyTenderMad - remainingToPay), [currencyTenderMad, remainingToPay]);
+  const currencyChangeMad = useMemo(() => Math.max(0, currencyTenderMad - currencyAmountToPayMad), [currencyTenderMad, currencyAmountToPayMad]);
   const currencyChangeAmount = useMemo(() => paymentCurrency ? currencyChangeMad * Number(paymentCurrency.rateFromMad || 1) : 0, [paymentCurrency, currencyChangeMad]);
   const voucherRequestedAmount = useMemo(() => {
     const draft = Number(paymentDraft || 0);
@@ -1616,6 +1620,12 @@ export function PosPage() {
     return normalizedCode === "CHEQUE" || normalizedLabel.includes("CHEQUE") || normalizedLabel.includes("CHÃƒË†QUE");
   }
 
+  function isCreditPaymentMethod(code: string, label?: string | null) {
+    const normalizedCode = normalizePaymentMethodToken(code);
+    const normalizedLabel = normalizePaymentMethodToken(label);
+    return normalizedCode === "CREDIT" || normalizedLabel.includes("CREDIT");
+  }
+
   function normalizePaymentMethodToken(value?: string | null) {
     return (value || "")
       .normalize("NFD")
@@ -1647,7 +1657,7 @@ export function PosPage() {
     ) return "CARD";
     if (isTransferPaymentMethod(code, label)) return "TRANSFER";
     if (isChequePaymentMethod(code, label)) return "CHEQUE";
-    if (normalizedCode === "CREDIT" || normalizedLabel.includes("CREDIT")) return "CREDIT";
+    if (isCreditPaymentMethod(code, label)) return "CREDIT";
     return defaultPaymentMethods.includes(normalizedCode) ? normalizedCode : "MIXED";
   }
 
@@ -2488,11 +2498,15 @@ export function PosPage() {
 
   function addLocalPayment(methodCode: string) {
     const amount = Number(paymentDraft || 0);
+    const method = activePaymentMethods.find((item) => item.code === methodCode);
+    if (isCreditPaymentMethod(methodCode, method?.label) && !selectedCustomer) {
+      setMessage("Client obligatoire pour un paiement en credit.");
+      return;
+    }
     if (amount <= 0) {
       setMessage("Montant de paiement obligatoire.");
       return;
     }
-    const method = activePaymentMethods.find((item) => item.code === methodCode);
     const dueBefore = Math.max(0, grandTotal - paymentEntries.reduce((sum, entry) => sum + entry.amountMad, 0));
     const changeMad = normalizePaymentMethodForCheckout(methodCode, method?.label) === "CASH"
       ? Number(Math.max(0, amount - dueBefore).toFixed(2))
@@ -2844,6 +2858,10 @@ export function PosPage() {
     }
     if (!paymentEntries.length) {
       setMessage("Ajoute au moins un reglement avant d'encaisser.");
+      return;
+    }
+    if (paymentEntries.some((entry) => isCreditPaymentMethod(entry.methodCode, entry.methodLabel)) && !selectedCustomer) {
+      setMessage("Client obligatoire pour un paiement en credit.");
       return;
     }
     setSaving(true);
@@ -4070,7 +4088,7 @@ export function PosPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-[18px] border border-orange-300/20 bg-orange-300/10 px-4 py-3">
                     <p className="text-[10px] uppercase tracking-[0.22em] text-orange-200/80">Montant a payer MAD</p>
-                    <p className="mt-1 text-xl font-semibold text-white">{formatCurrency(remainingToPay)}</p>
+                    <p className="mt-1 text-xl font-semibold text-white">{formatCurrency(currencyAmountToPayMad)}</p>
                   </div>
                   <div className="rounded-[18px] border border-white/10 bg-white/5 px-4 py-3">
                     <p className="text-[10px] uppercase tracking-[0.22em] text-[#cdbfaf]">Montant a payer en devise</p>
