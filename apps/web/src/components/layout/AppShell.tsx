@@ -11,6 +11,7 @@ import {
   Factory,
   FileSpreadsheet,
   LayoutDashboard,
+  Menu,
   PackageSearch,
   Printer,
   Receipt,
@@ -630,6 +631,7 @@ export function AppShell() {
   const [openingCurrencyTarget, setOpeningCurrencyTarget] = useState<"MAD" | "EUR" | "USD">("MAD");
   const [cashierPasswordDraft, setCashierPasswordDraft] = useState({ currentCode: "", nextCode: "", confirmCode: "" });
   const [cashierPasswordTarget, setCashierPasswordTarget] = useState<"currentCode" | "nextCode" | "confirmCode">("currentCode");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
       navigationItems.filter((item) => item.children).map((item) => [item.label, hasActiveChild(item, pathname)])
@@ -649,6 +651,10 @@ export function AppShell() {
       return next;
     });
   }, [navigationItems, pathname, permissions]);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(new Date()), 1000);
@@ -2057,6 +2063,82 @@ export function AppShell() {
     setTicketActionMessage(`Impression du ticket detaxe ${ticket.number} lancee.`);
   }
 
+  const renderSidebarNavigation = (variant: "desktop" | "mobile") => (
+    <nav className="mt-6 flex-1 space-y-3 overflow-y-auto pr-1">
+      {navigationItems.filter((item) => canView(item, permissions)).map((item) => (
+        item.children ? (
+          <div key={item.label} className="space-y-2">
+            <div>
+              {(() => {
+                const activeGroup = hasActiveChild(item, pathname);
+                const openGroup = openMenus[item.label];
+                return (
+                  <button
+                    type="button"
+                    className={cn(
+                      "app-menu-button flex w-full items-center gap-3 rounded-[24px] border px-4 py-2.5 text-left text-sm font-semibold transition",
+                      activeGroup || openGroup
+                        ? "app-menu-button-active border-orange-300/30 bg-gradient-to-r from-orange-300/25 to-orange-500/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
+                        : "app-menu-button-idle border-white/10 bg-black/25 text-[#f3e8dc] hover:bg-white/5"
+                    )}
+                    onClick={() => setOpenMenus((current) => ({ ...current, [item.label]: !current[item.label] }))}
+                  >
+                    {item.icon ? <item.icon className="h-4 w-4 text-orange-200" /> : null}
+                    <span className="flex-1">{item.label}</span>
+                    {openGroup ? <ChevronDown className="h-4 w-4 text-orange-200" /> : <ChevronRight className="h-4 w-4 text-orange-200" />}
+                  </button>
+                );
+              })()}
+              {openMenus[item.label] ? (
+                <div className="rounded-[22px] border border-white/10 bg-black/20 p-3">
+                  <div className="space-y-1.5">
+                    {item.children.filter((child) => canView(child, permissions)).map((child) => {
+                      const active = pathname === child.to;
+                      const Icon = child.icon ?? FileSpreadsheet;
+                      return (
+                        <NavLink
+                          key={child.label}
+                          to={child.to!}
+                          onClick={() => variant === "mobile" && setMobileMenuOpen(false)}
+                          className={cn(
+                            "app-submenu-link flex items-center gap-2.5 rounded-2xl px-3 py-1.5 text-[12px] transition",
+                            active
+                              ? "app-submenu-link-active bg-gradient-to-r from-orange-300/20 to-orange-500/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
+                              : "app-submenu-link-idle text-[#c9bbad] hover:bg-white/5 hover:text-white"
+                          )}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {child.label}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : item.to ? (
+          <NavLink
+            key={item.label}
+            to={item.to}
+            onClick={() => variant === "mobile" && setMobileMenuOpen(false)}
+            className={({ isActive }) =>
+              cn(
+                "app-menu-button flex items-center gap-3 rounded-[24px] border px-4 py-2.5 text-sm font-medium transition",
+                isActive
+                  ? "app-menu-button-active border-orange-300/30 bg-gradient-to-r from-orange-300/25 to-orange-500/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
+                  : "app-menu-button-idle border-white/10 bg-black/25 text-[#c9bbad] hover:bg-white/5 hover:text-white"
+              )
+            }
+          >
+            {item.icon ? <item.icon className="h-4 w-4 text-orange-200" /> : null}
+            {item.label}
+          </NavLink>
+        ) : null
+      ))}
+    </nav>
+  );
+
   return (
     <div className="h-screen overflow-hidden bg-transparent">
       {inventoryNotifications.length ? (
@@ -2094,6 +2176,54 @@ export function AppShell() {
           ))}
         </div>
       ) : null}
+      {mobileMenuOpen ? (
+        <div className="fixed inset-0 z-[95] lg:hidden">
+          <button
+            type="button"
+            aria-label="Fermer le menu"
+            className="absolute inset-0 bg-black/65 backdrop-blur-[3px]"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <aside className="absolute left-0 top-0 flex h-full w-[min(88vw,360px)] flex-col overflow-hidden border-r border-orange-200/15 bg-[#17110d] p-4 shadow-[24px_0_80px_rgba(0,0,0,0.48)]">
+            <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-16 items-center justify-center overflow-hidden rounded-[18px] bg-gradient-to-br from-[#ffb15c] to-[#ff7a00] px-2.5 py-2">
+                    <img
+                      src="/logo-gdt.jpg"
+                      alt="Logo GDT"
+                      className="h-full w-full object-contain mix-blend-multiply contrast-125"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-orange-200/80">Galerie des Tanneurs</p>
+                    <p className="mt-1 text-sm font-semibold text-white">Menu</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-full border border-white/10 p-2 text-[#eadfd4] transition hover:border-orange-300/35 hover:text-white"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {renderSidebarNavigation("mobile")}
+
+            <div className="mt-4 rounded-[22px] border border-white/10 bg-black/25 px-3.5 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#ccbcae]">Session</p>
+                <p className="text-right text-[12px] font-semibold text-white">{user?.fullName ?? "Operateur"}</p>
+              </div>
+              <Button className="mt-3 w-full !h-9 !text-[12px]" variant="secondary" onClick={() => void logout()}>
+                Deconnexion
+              </Button>
+            </div>
+          </aside>
+        </div>
+      ) : null}
       <div className={cn("mx-auto flex h-screen gap-6 px-4 py-4 md:px-6 lg:px-8", isPosRoute ? "max-w-none" : "max-w-[1700px]")}>
         {!isPosRoute ? (
           <aside className="sticky top-4 hidden h-[calc(100vh-2rem)] w-[284px] shrink-0 self-start lg:block">
@@ -2115,77 +2245,7 @@ export function AppShell() {
                 <p className="mt-4 text-center text-sm text-[#c9bbad]">Gestion de Stock. Version 2026</p>
               </div>
 
-              <nav className="mt-6 flex-1 space-y-3 overflow-y-auto pr-1">
-                {navigationItems.filter((item) => canView(item, permissions)).map((item) => (
-                  item.children ? (
-                    <div key={item.label} className="space-y-2">
-                      <div>
-                        {(() => {
-                          const activeGroup = hasActiveChild(item, pathname);
-                          const openGroup = openMenus[item.label];
-                          return (
-                        <button
-                          type="button"
-                          className={cn(
-                            "app-menu-button flex w-full items-center gap-3 rounded-[24px] border px-4 py-2.5 text-left text-sm font-semibold transition",
-                            activeGroup || openGroup
-                              ? "app-menu-button-active border-orange-300/30 bg-gradient-to-r from-orange-300/25 to-orange-500/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
-                              : "app-menu-button-idle border-white/10 bg-black/25 text-[#f3e8dc] hover:bg-white/5"
-                          )}
-                          onClick={() => setOpenMenus((current) => ({ ...current, [item.label]: !current[item.label] }))}
-                        >
-                          {item.icon ? <item.icon className="h-4 w-4 text-orange-200" /> : null}
-                          <span className="flex-1">{item.label}</span>
-                          {openGroup ? <ChevronDown className="h-4 w-4 text-orange-200" /> : <ChevronRight className="h-4 w-4 text-orange-200" />}
-                        </button>
-                          );
-                        })()}
-                        {openMenus[item.label] ? (
-                          <div className="rounded-[22px] border border-white/10 bg-black/20 p-3">
-                            <div className="space-y-1.5">
-                            {item.children.filter((child) => canView(child, permissions)).map((child) => {
-                              const active = pathname === child.to;
-                              const Icon = child.icon ?? FileSpreadsheet;
-                              return (
-                                <NavLink
-                                  key={child.label}
-                                  to={child.to!}
-                                  className={cn(
-                                    "app-submenu-link flex items-center gap-2.5 rounded-2xl px-3 py-1.5 text-[12px] transition",
-                                    active
-                                      ? "app-submenu-link-active bg-gradient-to-r from-orange-300/20 to-orange-500/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
-                                      : "app-submenu-link-idle text-[#c9bbad] hover:bg-white/5 hover:text-white"
-                                  )}
-                                  >
-                                    <Icon className="h-3.5 w-3.5" />
-                                    {child.label}
-                                  </NavLink>
-                              );
-                            })}
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : item.to ? (
-                    <NavLink
-                      key={item.label}
-                      to={item.to}
-                      className={({ isActive }) =>
-                        cn(
-                          "app-menu-button flex items-center gap-3 rounded-[24px] border px-4 py-2.5 text-sm font-medium transition",
-                          isActive
-                            ? "app-menu-button-active border-orange-300/30 bg-gradient-to-r from-orange-300/25 to-orange-500/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.05)]"
-                            : "app-menu-button-idle border-white/10 bg-black/25 text-[#c9bbad] hover:bg-white/5 hover:text-white"
-                        )
-                      }
-                    >
-                      {item.icon ? <item.icon className="h-4 w-4 text-orange-200" /> : null}
-                      {item.label}
-                    </NavLink>
-                  ) : null
-                ))}
-              </nav>
+              {renderSidebarNavigation("desktop")}
 
               <div className="mt-5 rounded-[22px] border border-white/10 bg-black/25 px-3.5 py-3">
                 <div className="flex items-center justify-between gap-3">
@@ -2215,9 +2275,19 @@ export function AppShell() {
         <div className="min-w-0 flex-1 overflow-hidden">
           <div className={cn("card-shell flex h-[calc(100vh-2rem)] flex-col overflow-hidden p-4 md:p-6 lg:p-7", isPosRoute ? "w-full" : "")}>
             <header className="mb-6 flex flex-col gap-4 rounded-[26px] border border-white/10 bg-black/20 p-4 md:flex-row md:items-center md:justify-between md:p-5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">GDT Suite</p>
-                <h2 className="mt-1 text-2xl font-semibold text-white">Galerie des Tanneurs</h2>
+              <div className="flex items-start justify-between gap-3 lg:block">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">GDT Suite</p>
+                  <h2 className="mt-1 text-2xl font-semibold text-white">Galerie des Tanneurs</h2>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-orange-200/25 bg-orange-300/15 px-3.5 py-2 text-sm font-semibold text-orange-100 shadow-[0_12px_34px_rgba(0,0,0,0.22)] transition hover:border-orange-200/45 hover:bg-orange-300/25 lg:hidden"
+                  onClick={() => setMobileMenuOpen(true)}
+                >
+                  <Menu className="h-4 w-4" />
+                  Menu
+                </button>
               </div>
 
               <div className="flex flex-wrap items-center gap-3 text-sm text-[#d5c6b7]">
