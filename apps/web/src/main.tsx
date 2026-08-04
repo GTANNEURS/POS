@@ -15,9 +15,13 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </React.StrictMode>
 );
 
-window.setTimeout(() => {
+if (document.documentElement.dataset.splash === "on") {
+  window.setTimeout(() => {
+    document.body.classList.add("gdt-app-ready");
+  }, 5000);
+} else {
   document.body.classList.add("gdt-app-ready");
-}, 5000);
+}
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
