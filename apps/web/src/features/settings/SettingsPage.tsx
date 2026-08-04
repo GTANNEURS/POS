@@ -1457,57 +1457,64 @@ export function SettingsPage() {
                 ))}
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200/80">Style</p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <Field label="Nom du ticket"><Input value={selectedPrintProfile.label} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { label: e.target.value })} /></Field>
-                    <Field label="Police"><Input value={selectedPrintProfile.fontFamily} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { fontFamily: e.target.value })} placeholder="Arial, Helvetica..." /></Field>
-                    <Field label="Taille generale"><Input type="number" min="8" max="16" value={selectedPrintProfile.baseFontSize} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { baseFontSize: Number(e.target.value) })} /></Field>
-                    <Field label="Taille titre"><Input type="number" min="10" max="24" value={selectedPrintProfile.titleFontSize} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { titleFontSize: Number(e.target.value) })} /></Field>
-                    <Field label="Taille articles"><Input type="number" min="8" max="16" value={selectedPrintProfile.itemFontSize} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { itemFontSize: Number(e.target.value) })} /></Field>
-                    <Field label="Hauteur logo"><Input type="number" min="0" max="34" value={selectedPrintProfile.logoHeight} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { logoHeight: Number(e.target.value) })} /></Field>
-                    <Field label="Hauteur code-barres"><Input type="number" min="20" max="80" value={selectedPrintProfile.barcodeHeight} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { barcodeHeight: Number(e.target.value) })} /></Field>
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200/80">Afficher / retirer</p>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {([
-                      ["showLogo", "Logo"],
-                      ["showCompanyName", "Societe"],
-                      ["showBoutique", "Boutique"],
-                      ["showDate", "Date"],
-                      ["showTicketNumber", "Numero ticket"],
-                      ["showClient", "Client"],
-                      ["showSeller", "Vendeur"],
-                      ["showArticles", "Articles"],
-                      ["showTotals", "Totaux/prix"],
-                      ["showPayments", "Paiements"],
-                      ["showCgv", "Conditions vente"],
-                      ["showFooter", "Message pied"],
-                      ["showBarcode", "Code-barres"],
-                      ["showCompanyInfo", "Infos societe"]
-                    ] as Array<[keyof TicketPrintProfile, string]>).map(([key, label]) => (
-                      <label key={String(key)} className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition ${selectedPrintProfile[key] ? "border-orange-300/35 bg-orange-300/12 text-white" : "border-white/10 bg-black/20 text-[#d9c9bb]"}`}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(selectedPrintProfile[key])}
-                          onChange={(e) => updateTicketPrintProfile(selectedPrintType, { [key]: e.target.checked } as Partial<TicketPrintProfile>)}
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200/80">Afficher / retirer</p>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {([
+                    ["showLogo", "Logo"],
+                    ["showCompanyName", "Societe"],
+                    ["showBoutique", "Boutique"],
+                    ["showDate", "Date"],
+                    ["showTicketNumber", "Numero ticket"],
+                    ["showClient", "Client"],
+                    ["showSeller", "Vendeur"],
+                    ["showArticles", "Articles"],
+                    ["showTotals", "Totaux/prix"],
+                    ["showPayments", "Paiements"],
+                    ["showCgv", "Conditions vente"],
+                    ["showFooter", "Message pied"],
+                    ["showBarcode", "Code-barres"],
+                    ["showCompanyInfo", "Infos societe"]
+                  ] as Array<[keyof TicketPrintProfile, string]>).map(([key, label]) => (
+                    <label key={String(key)} className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition ${selectedPrintProfile[key] ? "border-orange-300/35 bg-orange-300/12 text-white" : "border-white/10 bg-black/20 text-[#d9c9bb]"}`}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedPrintProfile[key])}
+                        onChange={(e) => updateTicketPrintProfile(selectedPrintType, { [key]: e.target.checked } as Partial<TicketPrintProfile>)}
+                      />
+                      {label}
+                    </label>
+                  ))}
                 </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200/80">Style</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <Field label="Nom du ticket"><Input value={selectedPrintProfile.label} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { label: e.target.value })} /></Field>
+                  <Field label="Police"><Input value={selectedPrintProfile.fontFamily} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { fontFamily: e.target.value })} placeholder="Arial, Helvetica..." /></Field>
+                  <Field label="Taille generale"><Input type="number" min="8" max="16" value={selectedPrintProfile.baseFontSize} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { baseFontSize: Number(e.target.value) })} /></Field>
+                  <Field label="Taille titre"><Input type="number" min="10" max="24" value={selectedPrintProfile.titleFontSize} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { titleFontSize: Number(e.target.value) })} /></Field>
+                  <Field label="Taille articles"><Input type="number" min="8" max="16" value={selectedPrintProfile.itemFontSize} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { itemFontSize: Number(e.target.value) })} /></Field>
+                  <Field label="Hauteur logo"><Input type="number" min="0" max="34" value={selectedPrintProfile.logoHeight} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { logoHeight: Number(e.target.value) })} /></Field>
+                  <Field label="Hauteur code-barres"><Input type="number" min="20" max="80" value={selectedPrintProfile.barcodeHeight} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { barcodeHeight: Number(e.target.value) })} /></Field>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
                 <Field label="Texte en haut / badge"><Input value={selectedPrintProfile.headerText} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { headerText: e.target.value })} placeholder="Ex. DUPLICATA, DETAXE..." /></Field>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
                 <Field label="Message fixe bas ticket"><Input value={selectedPrintProfile.fixedBottomText} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { fixedBottomText: e.target.value })} /></Field>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
+                <Field label="Conditions / texte detaille"><Textarea rows={5} value={selectedPrintProfile.cgvText} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { cgvText: e.target.value })} /></Field>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
                 <Field label="Message pied de ticket"><Textarea rows={4} value={selectedPrintProfile.footerText} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { footerText: e.target.value })} /></Field>
-                <Field label="Conditions / texte detaille"><Textarea rows={4} value={selectedPrintProfile.cgvText} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { cgvText: e.target.value })} /></Field>
               </div>
 
               <div className="rounded-[24px] border border-orange-300/20 bg-orange-300/10 p-4">
