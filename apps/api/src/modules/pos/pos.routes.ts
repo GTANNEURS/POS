@@ -1068,7 +1068,7 @@ posRouter.get("/bootstrap", requirePermissions("pos_use"), asyncHandler(async (r
     prisma.cashRegister.findMany({ where: scopedWarehouseId ? { warehouseId: scopedWarehouseId } : undefined, orderBy: { name: "asc" }, select: { id: true, name: true, warehouseId: true } }),
     prisma.transporter.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.currency.findMany({ where: { isActive: true }, orderBy: [{ isBase: "desc" }, { code: "asc" }] }),
-    prisma.setting.findMany({ where: { key: { in: ["company_name", "company_logo_url", "company_address", "company_phone", "company_email", "company_website", "ticket_cgv", "ticket_footer"] } } }),
+    prisma.setting.findMany({ where: { key: { in: ["company_name", "company_logo_url", "company_address", "company_phone", "company_email", "company_website", "ticket_cgv", "ticket_footer", "ticket_print_profiles"] } } }),
     prisma.setting.findUnique({ where: { key: "boutiques_config" } })
   ]);
   const paymentMethodsSetting = await prisma.setting.findUnique({ where: { key: "payment_methods" } });
@@ -1076,6 +1076,7 @@ posRouter.get("/bootstrap", requirePermissions("pos_use"), asyncHandler(async (r
     ? (paymentMethodsSetting.value as Array<{ id: string; code: string; label: string; isActive: boolean }>).filter((item) => item.isActive !== false)
     : [];
   const settingsMap = Object.fromEntries(companySettings.map((setting) => [setting.key, typeof setting.value === "string" ? setting.value : ""]));
+  const ticketPrintProfilesSetting = companySettings.find((setting) => setting.key === "ticket_print_profiles");
   const boutiquesConfig = Array.isArray(boutiquesConfigSetting?.value)
     ? boutiquesConfigSetting.value as Array<{ id: string; name?: string; address?: string; phone?: string }>
     : [];
@@ -1103,7 +1104,8 @@ posRouter.get("/bootstrap", requirePermissions("pos_use"), asyncHandler(async (r
       email: settingsMap.company_email || "",
       website: settingsMap.company_website || "",
       cgvTerms: settingsMap.ticket_cgv || "",
-      ticketFooter: settingsMap.ticket_footer || ""
+      ticketFooter: settingsMap.ticket_footer || "",
+      ticketPrintProfiles: ticketPrintProfilesSetting?.value && typeof ticketPrintProfilesSetting.value === "object" ? ticketPrintProfilesSetting.value : null
     }
   });
 }));

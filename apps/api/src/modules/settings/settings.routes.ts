@@ -65,7 +65,8 @@ const schema = z.object({
   company_cnss: z.string().optional().default(""),
   product_colors: z.string().optional().default(""),
   product_sizes: z.string().optional().default(""),
-  currencies: z.string().optional().default("")
+  currencies: z.string().optional().default(""),
+  ticket_print_profiles: z.unknown().optional()
 });
 
 const boutiqueItemSchema = z.object({
@@ -563,11 +564,11 @@ settingsRouter.get("/", requirePermissions("settings_manage"), asyncHandler(asyn
 settingsRouter.put("/", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const payload = schema.parse(req.body);
   await Promise.all(
-    Object.entries(payload).map(([key, value]) =>
+    Object.entries(payload).filter(([, value]) => value !== undefined).map(([key, value]) =>
       prisma.setting.upsert({
         where: { key },
-        update: { value },
-        create: { key, value }
+        update: { value: value as Prisma.InputJsonValue },
+        create: { key, value: value as Prisma.InputJsonValue }
       })
     )
   );

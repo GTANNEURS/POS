@@ -13,6 +13,33 @@ type Warehouse = { id: string; name: string; type?: string; address?: string | n
 type CashRegister = { id: string; name: string; warehouseId: string };
 type Transporter = { id: string; name: string };
 type Currency = { id: string; code: string; name: string; symbol: string | null; rateFromMad: number; rateMode: string; isBase: boolean; isActive: boolean };
+type TicketPrintProfile = {
+  fontFamily?: string;
+  baseFontSize?: number;
+  titleFontSize?: number;
+  itemFontSize?: number;
+  logoHeight?: number;
+  barcodeHeight?: number;
+  headerText?: string;
+  cgvText?: string;
+  footerText?: string;
+  fixedBottomText?: string;
+  showLogo?: boolean;
+  showCompanyName?: boolean;
+  showBoutique?: boolean;
+  showDate?: boolean;
+  showTicketNumber?: boolean;
+  showClient?: boolean;
+  showSeller?: boolean;
+  showArticles?: boolean;
+  showTotals?: boolean;
+  showPayments?: boolean;
+  showCgv?: boolean;
+  showFooter?: boolean;
+  showBarcode?: boolean;
+  showCompanyInfo?: boolean;
+};
+type TicketPrintProfiles = Partial<Record<"cash" | "reprint" | "detax" | "gift" | "credit", TicketPrintProfile>>;
 type PosBootstrapPayload = {
   customers: Customer[];
   warehouses: Warehouse[];
@@ -30,6 +57,7 @@ type PosBootstrapPayload = {
     website?: string;
     ticketFooter?: string;
     cgvTerms?: string;
+    ticketPrintProfiles?: TicketPrintProfiles | null;
   };
 };
 type CartLine = { lineId: string; productId: string; variantId?: string | null; reference?: string; barcode?: string | null; name: string; color?: string | null; size?: string | null; quantity: number; price: number; discountAmount: number; kind?: "PRODUCT" | "ORDER_DEPOSIT"; orderSource?: "POS" | "LEGACY"; orderType?: string; orderNumber?: string; orderTotal?: number; depositAmount?: number };
@@ -331,7 +359,7 @@ function renderReceiptTextLines(value?: string | null, className = "muted") {
   }).join("");
 }
 
-function buildCode39Svg(value: string) {
+function buildCode39Svg(value: string, height = 54) {
   const patterns: Record<string, string> = {
     "0": "nnnwwnwnn",
     "1": "wnnwnnnnw",
@@ -386,13 +414,13 @@ function buildCode39Svg(value: string) {
     for (let index = 0; index < pattern.length; index += 1) {
       const width = pattern[index] === "w" ? wide : narrow;
       if (index % 2 === 0) {
-        bars.push(`<rect x="${x}" y="0" width="${width}" height="54" fill="#111" />`);
+        bars.push(`<rect x="${x}" y="0" width="${width}" height="${height}" fill="#111" />`);
       }
       x += width;
     }
     x += gap;
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${x} 54" width="100%" height="54" preserveAspectRatio="none">${bars.join("")}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${x} ${height}" width="100%" height="${height}" preserveAspectRatio="none">${bars.join("")}</svg>`;
 }
 
 export function PosPage() {
@@ -2289,6 +2317,7 @@ export function PosPage() {
       companyWebsite?: string;
       ticketFooter?: string;
       cgvTerms?: string;
+      ticketPrintProfile?: TicketPrintProfile | null;
       subtotal: number;
       shippingFee: number;
       total: number;
@@ -2304,7 +2333,19 @@ export function PosPage() {
       return;
     }
 
-    const barcodeSvg = buildCode39Svg(sale.number);
+    const printProfile = context.ticketPrintProfile ?? {};
+    const showBlock = (key: keyof TicketPrintProfile, fallback = true) => printProfile[key] !== false && fallback;
+    const receiptFontFamily = printProfile.fontFamily || "Arial";
+    const receiptBaseFontSize = Number(printProfile.baseFontSize || 11);
+    const receiptTitleFontSize = Number(printProfile.titleFontSize || 16);
+    const receiptItemFontSize = Number(printProfile.itemFontSize || 10);
+    const receiptLogoHeight = Number(printProfile.logoHeight || 18);
+    const receiptBarcodeHeight = Number(printProfile.barcodeHeight || 46);
+    const receiptHeaderText = String(printProfile.headerText || "").trim();
+    const receiptCgvText = String(printProfile.cgvText || context.cgvTerms || "").trim();
+    const receiptFooterText = String(printProfile.footerText || context.ticketFooter || "Pied de page").trim();
+    const receiptBottomText = String(printProfile.fixedBottomText || "Merci pour votre visite").trim();
+    const barcodeSvg = buildCode39Svg(sale.number, receiptBarcodeHeight);
     const paymentSummary = paymentsSnapshot.length
       ? paymentsSnapshot
         .map((entry) => (isCurrencyPaymentMethod(entry.methodCode, entry.methodLabel) || normalizePaymentMethodForCheckout(entry.methodCode, entry.methodLabel) === "CASH"
@@ -2313,8 +2354,8 @@ export function PosPage() {
         .join(" - ")
       : "AUCUN REGLEMENT";
 
-    const cgvHtml = renderReceiptTextLines(context.cgvTerms?.trim() || "");
-    const footerHtml = renderReceiptTextLines(context.ticketFooter?.trim() || "Pied de page");
+    const cgvHtml = renderReceiptTextLines(receiptCgvText);
+    const footerHtml = renderReceiptTextLines(receiptFooterText);
     const getOrderReceiptParts = (line: typeof lines[number]) => {
       const rawName = String(line.name || "").trim();
       let orderType = String(line.orderType || "").trim();
@@ -2357,13 +2398,13 @@ export function PosPage() {
                   `}
               `
               : `
-                <div style="font-size:10px;font-weight:600;line-height:1.15;">${line.name}</div>
+                 <div style="font-size:${receiptItemFontSize}px;font-weight:600;line-height:1.15;">${line.name}</div>
                 ${meta ? `<div style="font-size:8px;color:#6c5c4f;margin-top:2px;line-height:1.1;">${meta}</div>` : ""}
               `}
             ${line.discountAmount > 0 ? `<div style="font-size:9px;color:#a05a36;margin-top:2px;line-height:1.15;">Remise ${formatCurrency(line.discountAmount)}</div>` : ""}
           </td>
-          <td style="text-align:center;white-space:nowrap;font-size:10px;">${formatNumber(line.quantity)}</td>
-          <td style="text-align:right;white-space:nowrap;font-size:10px;">${formatCurrency(line.lineTotal)}</td>
+          <td style="text-align:center;white-space:nowrap;font-size:${receiptItemFontSize}px;">${formatNumber(line.quantity)}</td>
+          <td style="text-align:right;white-space:nowrap;font-size:${receiptItemFontSize}px;">${formatCurrency(line.lineTotal)}</td>
         </tr>
       `;
     }).join("");
@@ -2376,15 +2417,15 @@ export function PosPage() {
             @page { size: 80mm auto; margin: 4mm; }
             body {
               margin: 0;
-              font-family: Arial, sans-serif;
+              font-family: ${receiptFontFamily}, Arial, sans-serif;
               background: #fff;
               color: #111;
               width: 72mm;
-              font-size: 11px;
+              font-size: ${receiptBaseFontSize}px;
             }
             .ticket { width: 100%; }
             .center { text-align: center; }
-            .title { font-size: 16px; font-weight: 700; margin: 2px 0; }
+            .title { font-size: ${receiptTitleFontSize}px; font-weight: 700; margin: 2px 0; }
             .muted { color: #5f5449; font-size: 10px; }
             .section { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #bca48d; }
             table { width: 100%; border-collapse: collapse; }
@@ -2398,13 +2439,14 @@ export function PosPage() {
         <body>
           <div class="ticket">
             <div class="center">
-              ${context.companyLogoUrl ? `<div style="margin-bottom:6px;"><img src="${context.companyLogoUrl}" alt="Logo" style="max-width:52mm;max-height:18mm;object-fit:contain;" /></div>` : ""}
-              <div class="title">${context.companyName}</div>
-              <div class="strong">${context.warehouseName}</div>
-              ${context.warehouseAddress ? `<div class="muted">${context.warehouseAddress}</div>` : ""}
-              ${context.warehousePhone ? `<div class="muted">${context.warehousePhone}</div>` : ""}
+              ${showBlock("showLogo") && context.companyLogoUrl ? `<div style="margin-bottom:6px;"><img src="${context.companyLogoUrl}" alt="Logo" style="max-width:52mm;max-height:${receiptLogoHeight}mm;object-fit:contain;" /></div>` : ""}
+              ${showBlock("showCompanyName") ? `<div class="title">${context.companyName}</div>` : ""}
+              ${showBlock("showBoutique") ? `<div class="strong">${context.warehouseName}</div>` : ""}
+              ${showBlock("showBoutique") && context.warehouseAddress ? `<div class="muted">${context.warehouseAddress}</div>` : ""}
+              ${showBlock("showBoutique") && context.warehousePhone ? `<div class="muted">${context.warehousePhone}</div>` : ""}
               <div class="muted">${context.registerName}</div>
-              <div class="muted">${new Date(sale.createdAt).toLocaleString("fr-FR")}</div>
+              ${showBlock("showDate") ? `<div class="muted">${new Date(sale.createdAt).toLocaleString("fr-FR")}</div>` : ""}
+              ${receiptHeaderText ? `<div style="display:inline-block;margin-top:6px;padding:3px 9px;border:1px solid #111;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;">${escapeReceiptHtml(receiptHeaderText)}</div>` : ""}
             </div>
 
             <div class="section">
@@ -2442,14 +2484,14 @@ export function PosPage() {
             </div>
 
             <div class="section center">
-              <div style="text-align:left;font-size:9px;margin-bottom:8px;">${cgvHtml || renderReceiptTextLines("Aucune condition generale de vente configuree.")}</div>
-              <div style="border-top:1px dashed #bca48d;margin:8px 0 6px;"></div>
-              <div style="margin-bottom:8px;">${footerHtml}</div>
-              <div style="margin-bottom:4px;">${barcodeSvg}</div>
+              ${showBlock("showCgv") ? `<div style="text-align:left;font-size:9px;margin-bottom:8px;">${cgvHtml || renderReceiptTextLines("Aucune condition generale de vente configuree.")}</div>` : ""}
+              ${(showBlock("showCgv") || showBlock("showFooter")) ? `<div style="border-top:1px dashed #bca48d;margin:8px 0 6px;"></div>` : ""}
+              ${showBlock("showFooter") ? `<div style="margin-bottom:8px;">${footerHtml}</div>` : ""}
+              ${showBlock("showBarcode") ? `<div style="margin-bottom:4px;">${barcodeSvg}</div>` : ""}
             </div>
 
             <div class="section center">
-              <div class="muted" style="margin-bottom:4px;">Merci pour votre visite</div>
+              ${receiptBottomText ? `<div class="muted" style="margin-bottom:4px;">${escapeReceiptHtml(receiptBottomText)}</div>` : ""}
               ${context.companyAddress ? `<div class="muted">${context.companyAddress}</div>` : ""}
               ${context.companyPhone ? `<div class="muted">${context.companyPhone}</div>` : ""}
               ${context.companyEmail ? `<div class="muted">${context.companyEmail}</div>` : ""}
@@ -2979,6 +3021,7 @@ export function PosPage() {
         companyWebsite: company?.website || "",
         ticketFooter: company?.ticketFooter || "",
         cgvTerms: company?.cgvTerms || "",
+        ticketPrintProfile: company?.ticketPrintProfiles?.cash ?? null,
         subtotal: cartSubtotal,
         shippingFee: shippingFeeValue,
         total: grandTotal,

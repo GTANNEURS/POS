@@ -3,7 +3,7 @@ import { api } from "../../lib/api";
 import { getStoredTheme, saveTheme, type AppTheme } from "../../lib/theme";
 import { Button, Field, Input, LoadingBlock, PageHeader, SectionCard, Textarea } from "../../components/ui/primitives";
 
-type SettingRow = { key: string; value: string };
+type SettingRow = { key: string; value: unknown };
 type Permission = { id: string; code: string; name?: string; label: string };
 type Role = { id: string; name: string; label: string; rolePermissions: Array<{ permission: Permission }> };
 type UserLoginMode = "admin" | "manager" | "caissier" | "operateur" | "autre";
@@ -37,8 +37,38 @@ type CurrenciesPayload = { baseCurrency: "MAD"; currencies: CurrencyRow[] };
 type PaymentMethodsPayload = { paymentMethods: PaymentMethodRow[] };
 type UsersPayload = { users: UserRow[]; roles: Role[]; permissions: Permission[]; warehouses: BoutiqueOption[] };
 type PosBootstrapPayload = { warehouses: Array<{ id: string; name: string; type?: string }>; sellers: SellerOption[] };
-type SettingsTab = "societe" | "boutique" | "utilisateurs" | "vendeurs" | "couleurs" | "tailles" | "devises" | "paiements";
+type SettingsTab = "societe" | "tickets" | "boutique" | "utilisateurs" | "vendeurs" | "couleurs" | "tailles" | "devises" | "paiements";
 type UserDetailTab = "infos" | "droits";
+type TicketPrintType = "cash" | "reprint" | "detax" | "gift" | "credit";
+type TicketPrintProfile = {
+  label: string;
+  enabled: boolean;
+  fontFamily: string;
+  baseFontSize: number;
+  titleFontSize: number;
+  itemFontSize: number;
+  logoHeight: number;
+  barcodeHeight: number;
+  headerText: string;
+  cgvText: string;
+  footerText: string;
+  fixedBottomText: string;
+  showLogo: boolean;
+  showCompanyName: boolean;
+  showBoutique: boolean;
+  showDate: boolean;
+  showTicketNumber: boolean;
+  showClient: boolean;
+  showSeller: boolean;
+  showArticles: boolean;
+  showTotals: boolean;
+  showPayments: boolean;
+  showCgv: boolean;
+  showFooter: boolean;
+  showBarcode: boolean;
+  showCompanyInfo: boolean;
+};
+type TicketPrintProfiles = Record<TicketPrintType, TicketPrintProfile>;
 
 const CODE39_MAP: Record<string, string> = {
   "0": "nnnwwnwnn", "1": "wnnwnnnnw", "2": "nnwwnnnnw", "3": "wnwwnnnnn",
@@ -71,6 +101,153 @@ type SettingsForm = {
   product_colors: string;
   product_sizes: string;
   currencies: string;
+  ticket_print_profiles: TicketPrintProfiles;
+};
+
+const defaultTicketPrintProfiles: TicketPrintProfiles = {
+  cash: {
+    label: "Ticket de caisse",
+    enabled: true,
+    fontFamily: "Arial",
+    baseFontSize: 11,
+    titleFontSize: 16,
+    itemFontSize: 10,
+    logoHeight: 18,
+    barcodeHeight: 46,
+    headerText: "",
+    cgvText: `CONDITIONS GENERALES DE VENTE
+- Merci de conserver ce ticket, il constitue votre preuve d'achat.
+- Les echanges sont acceptes dans un delai de 7 jours sur presentation du ticket.
+- Les articles doivent etre retournes dans leur etat d'origine avec etiquette.`,
+    footerText: "Merci pour votre visite",
+    fixedBottomText: "Merci pour votre visite",
+    showLogo: true,
+    showCompanyName: true,
+    showBoutique: true,
+    showDate: true,
+    showTicketNumber: true,
+    showClient: true,
+    showSeller: true,
+    showArticles: true,
+    showTotals: true,
+    showPayments: true,
+    showCgv: true,
+    showFooter: true,
+    showBarcode: true,
+    showCompanyInfo: true
+  },
+  reprint: {
+    label: "Re-impression ticket",
+    enabled: true,
+    fontFamily: "Arial",
+    baseFontSize: 11,
+    titleFontSize: 16,
+    itemFontSize: 10,
+    logoHeight: 18,
+    barcodeHeight: 46,
+    headerText: "DUPLICATA",
+    cgvText: "",
+    footerText: "Merci pour votre visite",
+    fixedBottomText: "Merci pour votre visite",
+    showLogo: true,
+    showCompanyName: true,
+    showBoutique: true,
+    showDate: true,
+    showTicketNumber: true,
+    showClient: true,
+    showSeller: true,
+    showArticles: true,
+    showTotals: true,
+    showPayments: true,
+    showCgv: true,
+    showFooter: true,
+    showBarcode: true,
+    showCompanyInfo: true
+  },
+  detax: {
+    label: "Ticket detaxe",
+    enabled: true,
+    fontFamily: "Arial",
+    baseFontSize: 11,
+    titleFontSize: 15,
+    itemFontSize: 10,
+    logoHeight: 16,
+    barcodeHeight: 44,
+    headerText: "DETAXE",
+    cgvText: "",
+    footerText: "Document detaxe client",
+    fixedBottomText: "Merci pour votre visite",
+    showLogo: true,
+    showCompanyName: true,
+    showBoutique: true,
+    showDate: true,
+    showTicketNumber: true,
+    showClient: true,
+    showSeller: false,
+    showArticles: true,
+    showTotals: true,
+    showPayments: false,
+    showCgv: false,
+    showFooter: true,
+    showBarcode: true,
+    showCompanyInfo: true
+  },
+  gift: {
+    label: "Ticket cadeau",
+    enabled: true,
+    fontFamily: "Arial",
+    baseFontSize: 11,
+    titleFontSize: 15,
+    itemFontSize: 10,
+    logoHeight: 18,
+    barcodeHeight: 42,
+    headerText: "TICKET CADEAU",
+    cgvText: "",
+    footerText: "Echange possible selon conditions boutique.",
+    fixedBottomText: "Merci pour votre visite",
+    showLogo: true,
+    showCompanyName: true,
+    showBoutique: true,
+    showDate: true,
+    showTicketNumber: true,
+    showClient: false,
+    showSeller: false,
+    showArticles: true,
+    showTotals: false,
+    showPayments: false,
+    showCgv: false,
+    showFooter: true,
+    showBarcode: true,
+    showCompanyInfo: false
+  },
+  credit: {
+    label: "Ticket avoir",
+    enabled: true,
+    fontFamily: "Arial",
+    baseFontSize: 11,
+    titleFontSize: 15,
+    itemFontSize: 10,
+    logoHeight: 18,
+    barcodeHeight: 46,
+    headerText: "BON D'AVOIR",
+    cgvText: "",
+    footerText: "Bon valable uniquement dans la boutique d'origine.",
+    fixedBottomText: "Merci pour votre visite",
+    showLogo: true,
+    showCompanyName: true,
+    showBoutique: true,
+    showDate: true,
+    showTicketNumber: true,
+    showClient: true,
+    showSeller: false,
+    showArticles: true,
+    showTotals: true,
+    showPayments: false,
+    showCgv: false,
+    showFooter: true,
+    showBarcode: true,
+    showCompanyInfo: true
+  }
 };
 
 const defaultForm: SettingsForm = {
@@ -102,11 +279,13 @@ const defaultForm: SettingsForm = {
   company_cnss: "",
   product_colors: "Noir, Camel, Marron, Orange",
   product_sizes: "XS, S, M, L, XL",
-  currencies: "MAD, EUR, USD"
+  currencies: "MAD, EUR, USD",
+  ticket_print_profiles: defaultTicketPrintProfiles
 };
 
 const tabs: Array<{ key: SettingsTab; label: string }> = [
   { key: "societe", label: "Societe" },
+  { key: "tickets", label: "Tickets" },
   { key: "boutique", label: "Boutique" },
   { key: "utilisateurs", label: "Utilisateurs" },
   { key: "vendeurs", label: "Vendeurs" },
@@ -118,6 +297,83 @@ const tabs: Array<{ key: SettingsTab; label: string }> = [
 
 function toList(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function normalizeTicketPrintProfiles(value: unknown): TicketPrintProfiles {
+  const source = value && typeof value === "object" ? value as Partial<Record<TicketPrintType, Partial<TicketPrintProfile>>> : {};
+  return (Object.keys(defaultTicketPrintProfiles) as TicketPrintType[]).reduce((profiles, type) => ({
+    ...profiles,
+    [type]: {
+      ...defaultTicketPrintProfiles[type],
+      ...(source[type] && typeof source[type] === "object" ? source[type] : {})
+    }
+  }), {} as TicketPrintProfiles);
+}
+
+function settingString(value: unknown, fallback = "") {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : fallback;
+}
+
+function TicketPreview({ profile, form }: { profile: TicketPrintProfile; form: SettingsForm }) {
+  const previewItems = [
+    { name: "36H", reference: "A235", qty: 1, total: "1.490,00 MAD" },
+    { name: "ABS GM", reference: "58507", qty: 1, total: "1.990,00 MAD" }
+  ];
+  const line = <div className="my-2 border-t border-dashed border-[#bca48d]" />;
+
+  return (
+    <div className="sticky top-4 rounded-[28px] border border-orange-300/20 bg-[#f8f1e7] p-4 text-[#17110d] shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
+      <div
+        className="mx-auto w-[272px] rounded-[10px] bg-white px-4 py-5 shadow-inner"
+        style={{ fontFamily: `${profile.fontFamily}, Arial, sans-serif`, fontSize: `${profile.baseFontSize}px` }}
+      >
+        <div className="text-center">
+          {profile.showLogo ? (
+            <div className="mx-auto mb-2 flex items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#ffb15c] to-[#ff7a00] px-2" style={{ width: 58, height: profile.logoHeight + 18 }}>
+              {form.company_logo_url ? <img src={form.company_logo_url} alt="Logo" className="max-h-full max-w-full object-contain mix-blend-multiply" /> : <span className="text-sm font-bold">GDT</span>}
+            </div>
+          ) : null}
+          {profile.showCompanyName ? <div className="font-bold" style={{ fontSize: `${profile.titleFontSize}px` }}>{form.company_name || "Galerie des Tanneurs"}</div> : null}
+          {profile.showBoutique ? <div className="font-semibold">Gueliz</div> : null}
+          {profile.showDate ? <div className="text-[#6c5c4f]">12/06/2026 14:35</div> : null}
+          {profile.headerText ? <div className="mt-2 inline-flex rounded-full border border-[#17110d] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em]">{profile.headerText}</div> : null}
+        </div>
+        {line}
+        {profile.showTicketNumber ? <div className="text-center font-bold" style={{ fontSize: `${profile.titleFontSize}px` }}>Ticket N° : GUE-266-1000012</div> : null}
+        {profile.showClient ? <div><strong>Client :</strong> Client comptoir</div> : null}
+        {profile.showSeller ? <div><strong>Vendeur :</strong> Nadia</div> : null}
+        {profile.showArticles ? (
+          <>
+            {line}
+            <div className="grid grid-cols-[1fr_34px_78px] gap-2 text-[9px] font-bold uppercase tracking-[0.08em] text-[#6c5c4f]">
+              <span>Article</span><span className="text-center">Qte</span><span className="text-right">Total</span>
+            </div>
+            <div className="mt-1 space-y-2">
+              {previewItems.map((item) => (
+                <div key={item.reference} className="grid grid-cols-[1fr_34px_78px] gap-2" style={{ fontSize: `${profile.itemFontSize}px` }}>
+                  <div><div className="font-semibold">{item.name}</div><div className="text-[8px] text-[#6c5c4f]">{item.reference}</div></div>
+                  <div className="text-center">{item.qty}</div>
+                  <div className="text-right">{profile.showTotals ? item.total : ""}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+        {profile.showTotals ? <>{line}<div className="flex justify-between font-bold" style={{ fontSize: `${profile.titleFontSize - 1}px` }}><span>Total</span><span>3.480,00 MAD</span></div></> : null}
+        {profile.showPayments ? <>{line}<div className="font-bold">Paiements</div><div className="text-[9px] uppercase tracking-[0.08em]">ESPECE - CARTE BANCAIRE</div></> : null}
+        {(profile.showCgv || profile.showFooter || profile.showBarcode) ? (
+          <>
+            {line}
+            {profile.showCgv ? <div className="whitespace-pre-line text-left text-[8px] leading-tight">{profile.cgvText || form.ticket_cgv}</div> : null}
+            {profile.showFooter ? <div className="mt-2 text-center text-[10px]">{profile.footerText || form.ticket_footer}</div> : null}
+            {profile.showBarcode ? <div className="mt-2 grid place-items-center"><div className="w-full bg-[repeating-linear-gradient(90deg,#111_0,#111_2px,#fff_2px,#fff_4px,#111_4px,#111_7px,#fff_7px,#fff_10px)]" style={{ height: profile.barcodeHeight }} /></div> : null}
+          </>
+        ) : null}
+        {profile.showCompanyInfo ? <>{line}<div className="text-center text-[9px] text-[#6c5c4f]">{form.company_address || "Adresse societe"}<br />{form.company_email || "contact@gdt.local"}<br />{form.company_website || "www.gdt.ma"}</div></> : null}
+        {profile.fixedBottomText ? <div className="mt-2 text-center text-[10px] text-[#6c5c4f]">{profile.fixedBottomText}</div> : null}
+      </div>
+    </div>
+  );
 }
 
 function primaryUserMode(user: Pick<UserRow, "roles" | "loginMode">) {
@@ -294,6 +550,7 @@ export function SettingsPage() {
   const [newUserOpen, setNewUserOpen] = useState(false);
   const [userGroupTab, setUserGroupTab] = useState<UserGroupTab>("admins");
   const [newUser, setNewUser] = useState(buildNewUserDraft("admins"));
+  const [selectedPrintType, setSelectedPrintType] = useState<TicketPrintType>("cash");
 
   const selectedBoutique = boutiques.find((boutique) => boutique.id === selectedBoutiqueId) ?? null;
   const selectedSeller = sellerRows.find((seller) => seller.id === selectedSellerId) ?? null;
@@ -318,6 +575,7 @@ export function SettingsPage() {
     : "Toutes boutiques";
   const sellerCategoryTypes = Array.from(new Map(sellerCategories.map((category) => [category.typeId ?? "__none", { id: category.typeId ?? "__none", name: category.typeName || "Sans type" }])).values());
   const selectedUserPermissions = selectedUser ? Array.from(new Map(userRoles.filter((role) => selectedUser.roles.includes(role.name)).flatMap((role) => role.rolePermissions.map((item) => [item.permission.id, item.permission] as const))).values()) : [];
+  const selectedPrintProfile = form.ticket_print_profiles[selectedPrintType];
 
   function extractFriendlyPasswordMessage(error: unknown) {
     const raw = error instanceof Error ? error.message : String(error ?? "");
@@ -353,6 +611,19 @@ export function SettingsPage() {
     setMessage(nextTheme === "light" ? "Theme clair active." : "Theme sombre active.");
   }
 
+  function updateTicketPrintProfile(type: TicketPrintType, patch: Partial<TicketPrintProfile>) {
+    setForm((current) => ({
+      ...current,
+      ticket_print_profiles: {
+        ...current.ticket_print_profiles,
+        [type]: {
+          ...current.ticket_print_profiles[type],
+          ...patch
+        }
+      }
+    }));
+  }
+
   async function load() {
     setLoading(true);
     setMessage(null);
@@ -360,7 +631,8 @@ export function SettingsPage() {
     let fallbackBoutiques: BoutiqueOption[] = [];
     try {
       const data = await api<SettingRow[]>("/settings");
-      const mapped = Object.fromEntries(data.map((item) => [item.key, String(item.value)]));
+      const rawSettings = Object.fromEntries(data.map((item) => [item.key, item.value]));
+      const mapped = Object.fromEntries(data.map((item) => [item.key, settingString(item.value)]));
       setForm({
         company_name: mapped.company_name || defaultForm.company_name,
         company_currency: mapped.company_currency || defaultForm.company_currency,
@@ -377,7 +649,8 @@ export function SettingsPage() {
         company_cnss: mapped.company_cnss || defaultForm.company_cnss,
         product_colors: mapped.product_colors || defaultForm.product_colors,
         product_sizes: mapped.product_sizes || defaultForm.product_sizes,
-        currencies: mapped.currencies || defaultForm.currencies
+        currencies: mapped.currencies || defaultForm.currencies,
+        ticket_print_profiles: normalizeTicketPrintProfiles(rawSettings.ticket_print_profiles)
       });
 
       try {
@@ -470,6 +743,21 @@ export function SettingsPage() {
     setSaving(false);
     setMessage("Parametres enregistres.");
     await load();
+  }
+
+  async function submitTicketProfiles(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      await api("/settings", { method: "PUT", body: JSON.stringify({ ...form, default_tax_rate: Number(form.default_tax_rate) }) });
+      setMessage("Personnalisation des tickets enregistree.");
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Sauvegarde des tickets impossible.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function submitBoutiques(event: FormEvent<HTMLFormElement>) {
@@ -1149,6 +1437,92 @@ export function SettingsPage() {
             <Field label="Pied de page"><Textarea rows={4} value={form.ticket_footer} onChange={(e) => setForm((current) => ({ ...current, ticket_footer: e.target.value }))} /></Field>
             <div className="flex items-end xl:justify-end"><div><Button className="!px-3 !py-2 text-xs" type="submit">{saving ? "Enregistrement..." : "Sauvegarder"}</Button></div></div>
           </form>
+        </SectionCard>
+      ) : null}
+
+      {activeTab === "tickets" ? (
+        <SectionCard title="Personnalisation des tickets">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <form className="space-y-5" onSubmit={submitTicketProfiles}>
+              <div className="flex flex-wrap gap-2 rounded-[24px] border border-white/10 bg-black/20 p-2">
+                {(Object.keys(form.ticket_print_profiles) as TicketPrintType[]).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    className={`rounded-2xl px-3 py-2 text-xs font-semibold transition ${selectedPrintType === type ? "bg-orange-300 text-black shadow-[0_12px_28px_rgba(255,138,31,.24)]" : "text-[#e9dccc] hover:bg-white/5"}`}
+                    onClick={() => setSelectedPrintType(type)}
+                  >
+                    {form.ticket_print_profiles[type].label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200/80">Style</p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Field label="Nom du ticket"><Input value={selectedPrintProfile.label} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { label: e.target.value })} /></Field>
+                    <Field label="Police"><Input value={selectedPrintProfile.fontFamily} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { fontFamily: e.target.value })} placeholder="Arial, Helvetica..." /></Field>
+                    <Field label="Taille generale"><Input type="number" min="8" max="16" value={selectedPrintProfile.baseFontSize} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { baseFontSize: Number(e.target.value) })} /></Field>
+                    <Field label="Taille titre"><Input type="number" min="10" max="24" value={selectedPrintProfile.titleFontSize} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { titleFontSize: Number(e.target.value) })} /></Field>
+                    <Field label="Taille articles"><Input type="number" min="8" max="16" value={selectedPrintProfile.itemFontSize} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { itemFontSize: Number(e.target.value) })} /></Field>
+                    <Field label="Hauteur logo"><Input type="number" min="0" max="34" value={selectedPrintProfile.logoHeight} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { logoHeight: Number(e.target.value) })} /></Field>
+                    <Field label="Hauteur code-barres"><Input type="number" min="20" max="80" value={selectedPrintProfile.barcodeHeight} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { barcodeHeight: Number(e.target.value) })} /></Field>
+                  </div>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200/80">Afficher / retirer</p>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    {([
+                      ["showLogo", "Logo"],
+                      ["showCompanyName", "Societe"],
+                      ["showBoutique", "Boutique"],
+                      ["showDate", "Date"],
+                      ["showTicketNumber", "Numero ticket"],
+                      ["showClient", "Client"],
+                      ["showSeller", "Vendeur"],
+                      ["showArticles", "Articles"],
+                      ["showTotals", "Totaux/prix"],
+                      ["showPayments", "Paiements"],
+                      ["showCgv", "Conditions vente"],
+                      ["showFooter", "Message pied"],
+                      ["showBarcode", "Code-barres"],
+                      ["showCompanyInfo", "Infos societe"]
+                    ] as Array<[keyof TicketPrintProfile, string]>).map(([key, label]) => (
+                      <label key={String(key)} className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition ${selectedPrintProfile[key] ? "border-orange-300/35 bg-orange-300/12 text-white" : "border-white/10 bg-black/20 text-[#d9c9bb]"}`}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedPrintProfile[key])}
+                          onChange={(e) => updateTicketPrintProfile(selectedPrintType, { [key]: e.target.checked } as Partial<TicketPrintProfile>)}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Field label="Texte en haut / badge"><Input value={selectedPrintProfile.headerText} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { headerText: e.target.value })} placeholder="Ex. DUPLICATA, DETAXE..." /></Field>
+                <Field label="Message fixe bas ticket"><Input value={selectedPrintProfile.fixedBottomText} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { fixedBottomText: e.target.value })} /></Field>
+                <Field label="Message pied de ticket"><Textarea rows={4} value={selectedPrintProfile.footerText} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { footerText: e.target.value })} /></Field>
+                <Field label="Conditions / texte detaille"><Textarea rows={4} value={selectedPrintProfile.cgvText} onChange={(e) => updateTicketPrintProfile(selectedPrintType, { cgvText: e.target.value })} /></Field>
+              </div>
+
+              <div className="rounded-[24px] border border-orange-300/20 bg-orange-300/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200/80">Source commune</p>
+                <p className="mt-1 text-sm text-[#eadfd4]">Logo, nom societe, adresse, email et site web sont repris depuis l'onglet Societe.</p>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="secondary" className="!px-3 !py-2 text-xs" onClick={() => updateTicketPrintProfile(selectedPrintType, defaultTicketPrintProfiles[selectedPrintType])}>Restaurer ce ticket</Button>
+                <Button className="!px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Enregistrement..." : "Sauvegarder les tickets"}</Button>
+              </div>
+            </form>
+
+            <TicketPreview profile={selectedPrintProfile} form={form} />
+          </div>
         </SectionCard>
       ) : null}
 
