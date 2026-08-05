@@ -1005,6 +1005,28 @@ button.bg-rose-400\/10:hover {
   transform: translateY(-1px);
 }
 
+html[data-theme="light"] .bg-rose-400\/10 {
+  background:
+    linear-gradient(180deg, rgba(255, 241, 242, 0.96), rgba(254, 226, 226, 0.90)) !important;
+}
+
+html[data-theme="light"] .border-rose-300\/20,
+html[data-theme="light"] .border-rose-300\/30 {
+  border-color: rgba(127, 29, 29, 0.34) !important;
+}
+
+html[data-theme="light"] .text-rose-100,
+html[data-theme="light"] .text-rose-200 {
+  color: #7f1d1d !important;
+}
+
+html[data-theme="light"] button.bg-rose-400\/10 {
+  border-color: rgba(127, 29, 29, 0.42) !important;
+  background:
+    linear-gradient(135deg, rgba(190, 18, 60, 0.96), rgba(220, 38, 38, 0.94)) !important;
+  color: #fff7f7 !important;
+}
+
 .pos-detax-kicker {
   display: inline-flex;
   width: fit-content;
