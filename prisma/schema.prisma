@@ -301,7 +301,6 @@ model Customer {
   discountRate        Decimal              @default(0) @db.Decimal(5, 2)
   level               String               @default("Standard")
   balanceDue          Decimal              @default(0) @db.Decimal(14, 2)
-  creditLimit         Decimal?             @db.Decimal(14, 2)
   createdAt           DateTime             @default(now())
   sales               Sale[]
   loyaltyTransactions LoyaltyTransaction[]

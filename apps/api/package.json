@@ -10,7 +10,6 @@
     "start": "node dist/server.js",
     "lint": "tsc --noEmit",
     "prisma:generate": "prisma generate --schema ../../prisma/schema.prisma",
-    "prisma:migrate:deploy": "prisma migrate deploy --schema ../../prisma/schema.prisma",
     "prisma:push": "prisma db push --schema ../../prisma/schema.prisma",
     "prisma:seed": "tsx ../../prisma/seed.ts"
   },

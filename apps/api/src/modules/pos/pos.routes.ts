@@ -139,6 +139,7 @@ const legacyOrderLookupScript = resolve(__dirname, "../../../../../../legacy_ord
 const phpBinary = existsSync("C:\\xampp\\php\\php.exe") ? "C:\\xampp\\php\\php.exe" : "php";
 const SALES_DOCUMENTS_KEY = "sales_documents_store";
 const CUSTOMER_CREDIT_REPAYMENTS_KEY = "pos_customer_credit_repayments";
+const CUSTOMER_CREDIT_LIMITS_KEY = "customer_credit_limits";
 const fallbackRateFromMad: Record<string, number> = {
   MAD: 1,
   EUR: 0.09206,
@@ -258,6 +259,16 @@ async function saveCustomerCreditRepayments(tx: Pick<typeof prisma, "setting"> |
   });
 }
 
+async function loadCustomerCreditLimits(tx: Pick<typeof prisma, "setting"> | Prisma.TransactionClient) {
+  const setting = await tx.setting.findUnique({ where: { key: CUSTOMER_CREDIT_LIMITS_KEY } });
+  if (!setting?.value || typeof setting.value !== "object" || Array.isArray(setting.value)) return {} as Record<string, number>;
+  return Object.fromEntries(
+    Object.entries(setting.value as Record<string, unknown>)
+      .map(([customerId, amount]) => [customerId, Number(amount)] as const)
+      .filter((entry) => Number.isFinite(entry[1]) && entry[1] >= 0)
+  ) as Record<string, number>;
+}
+
 function normalizeCustomerCreditRepaymentMethod(method: string) {
   const normalized = String(method || "").trim().toUpperCase().replace(/\s+/g, "_");
   const allowed = new Set(["CASH", "CARD", "TRANSFER", "CHEQUE", "VOUCHER", "FOREIGN_CURRENCY", "MIXED"]);
@@ -282,7 +293,7 @@ function sumActiveRepayments(entries: CustomerCreditRepaymentEntry[], saleId: st
     .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
 }
 
-async function getCustomerCreditBalance(tx: Pick<typeof prisma, "sale" | "setting" | "customer"> | Prisma.TransactionClient, customerId: string) {
+async function getCustomerCreditBalance(tx: Pick<typeof prisma, "sale" | "setting"> | Prisma.TransactionClient, customerId: string) {
   const [creditSales, repayments] = await Promise.all([
     tx.sale.findMany({
       where: {
@@ -3685,13 +3696,15 @@ posRouter.post("/checkout", requirePermissions("pos_use"), asyncHandler(async (r
       if (!payload.customerId) throw new AppError("Client obligatoire pour un paiement credit.", 422);
       const customer = await tx.customer.findUnique({
         where: { id: payload.customerId },
-        select: { id: true, fullName: true, creditLimit: true }
+        select: { id: true, fullName: true }
       });
       if (!customer) throw new AppError("Client introuvable pour le credit.", 404);
-      if (customer.creditLimit != null) {
+      const creditLimits = await loadCustomerCreditLimits(tx);
+      const configuredCreditLimit = creditLimits[customer.id] ?? null;
+      if (configuredCreditLimit != null) {
         const currentCreditBalance = await getCustomerCreditBalance(tx, customer.id);
         const nextCreditBalance = Number((currentCreditBalance + creditPaymentAmount).toFixed(2));
-        const creditLimit = Number(customer.creditLimit);
+        const creditLimit = Number(configuredCreditLimit);
         if (nextCreditBalance > creditLimit + 0.009) {
           throw new AppError(`Plafond credit depasse pour ${customer.fullName}. Plafond: ${creditLimit.toFixed(2)} MAD, solde apres ticket: ${nextCreditBalance.toFixed(2)} MAD.`, 422);
         }

@@ -19,6 +19,7 @@ const schema = z.object({
 });
 
 const CUSTOMER_CREDIT_REPAYMENTS_KEY = "pos_customer_credit_repayments";
+const CUSTOMER_CREDIT_LIMITS_KEY = "customer_credit_limits";
 
 function parseRepaymentStore(value: unknown) {
   return Array.isArray(value)
@@ -29,6 +30,34 @@ function parseRepaymentStore(value: unknown) {
         deletedAt: (entry as { deletedAt?: unknown }).deletedAt == null ? null : String((entry as { deletedAt?: unknown }).deletedAt)
       }))
     : [];
+}
+
+function parseCreditLimitStore(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {} as Record<string, number>;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([customerId, amount]) => [customerId, Number(amount)] as const)
+      .filter((entry) => Number.isFinite(entry[1]) && entry[1] >= 0)
+  ) as Record<string, number>;
+}
+
+async function loadCreditLimits() {
+  const setting = await prisma.setting.findUnique({ where: { key: CUSTOMER_CREDIT_LIMITS_KEY } });
+  return parseCreditLimitStore(setting?.value);
+}
+
+async function saveCreditLimit(customerId: string, amount: number | null | undefined) {
+  const limits = await loadCreditLimits();
+  if (amount == null) {
+    delete limits[customerId];
+  } else {
+    limits[customerId] = Number(amount);
+  }
+  await prisma.setting.upsert({
+    where: { key: CUSTOMER_CREDIT_LIMITS_KEY },
+    create: { key: CUSTOMER_CREDIT_LIMITS_KEY, value: limits },
+    update: { value: limits }
+  });
 }
 
 export const customersRouter = Router();
@@ -50,10 +79,13 @@ customersRouter.get("/", asyncHandler(async (req, res) => {
     orderBy: { createdAt: "desc" }
   });
 
+  const creditLimits = await loadCreditLimits();
+
   return ok(
     res,
     customers.map((customer) => ({
       ...customer,
+      creditLimit: creditLimits[customer.id] ?? null,
       purchasesCount: customer.sales.length
     }))
   );
@@ -95,11 +127,13 @@ customersRouter.get("/:id", asyncHandler(async (req, res) => {
   const repayments = parseRepaymentStore(repaymentSetting?.value).filter((entry) => !entry.deletedAt && (entry.customerId === customer.id || creditSales.some((sale) => sale.id === entry.saleId)));
   const creditRepaidAmount = repayments.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
   const creditBalance = Number(Math.max(0, creditAmount - creditRepaidAmount).toFixed(2));
-  const creditLimit = customer.creditLimit == null ? null : Number(customer.creditLimit);
+  const creditLimits = await loadCreditLimits();
+  const creditLimit = creditLimits[customer.id] ?? null;
   const creditAvailable = creditLimit == null ? null : Number(Math.max(0, creditLimit - creditBalance).toFixed(2));
 
   return ok(res, {
     ...customer,
+    creditLimit,
     purchasesCount,
     totalSpent,
     totalPaid,
@@ -118,18 +152,22 @@ customersRouter.get("/:id", asyncHandler(async (req, res) => {
 }));
 
 customersRouter.post("/", asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const payload = schema.parse(req.body);
+  const { creditLimit, ...payload } = schema.parse(req.body);
   const customer = await prisma.customer.create({ data: payload });
+  await saveCreditLimit(customer.id, creditLimit ?? null);
   await writeAuditLog({ userId: req.currentUser?.id, action: "customers.create", entityType: "customer", entityId: customer.id, meta: payload });
-  return ok(res, customer, "Client cree.");
+  return ok(res, { ...customer, creditLimit: creditLimit ?? null }, "Client cree.");
 }));
 
 customersRouter.put("/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const payload = schema.partial().parse(req.body);
+  const { creditLimit, ...payload } = schema.partial().parse(req.body);
   const customerId = String(req.params.id);
   const customer = await prisma.customer.update({ where: { id: customerId }, data: payload });
-  await writeAuditLog({ userId: req.currentUser?.id, action: "customers.update", entityType: "customer", entityId: customer.id, meta: payload });
-  return ok(res, customer, "Client mis a jour.");
+  if (Object.prototype.hasOwnProperty.call(req.body ?? {}, "creditLimit")) {
+    await saveCreditLimit(customer.id, creditLimit ?? null);
+  }
+  await writeAuditLog({ userId: req.currentUser?.id, action: "customers.update", entityType: "customer", entityId: customer.id, meta: { ...payload, creditLimit } });
+  return ok(res, { ...customer, creditLimit: creditLimit ?? null }, "Client mis a jour.");
 }));
 
 customersRouter.delete("/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
