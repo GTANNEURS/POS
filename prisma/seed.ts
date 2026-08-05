@@ -367,8 +367,8 @@ async function seedBusinessData(data: Awaited<ReturnType<typeof seedCoreData>>) 
 
   await prisma.loyaltyTransaction.createMany({
     data: [
-      { customerId: data.customer1.id, points: 20, reason: "Achat POS dÃƒÆ’Ã‚Â©mo" },
-      { customerId: data.customer2.id, points: 10, reason: "Bonus fidÃƒÆ’Ã‚Â©litÃƒÆ’Ã‚Â©" }
+      { customerId: data.customer1.id, points: 20, reason: "Achat POS demo" },
+      { customerId: data.customer2.id, points: 10, reason: "Bonus fidelite" }
     ],
     skipDuplicates: true
   });

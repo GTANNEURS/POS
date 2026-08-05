@@ -150,6 +150,32 @@ type PaymentBreakdownEntry = {
   amount: number;
 };
 
+type CustomerCreditRow = {
+  id: string;
+  saleId: string;
+  saleNumber: string;
+  createdAt: string;
+  customer: { id: string | null; fullName: string; phone?: string | null; email?: string | null };
+  warehouse: { id: string; name: string };
+  sellerName: string;
+  creditAmount: number;
+  repaidAmount: number;
+  balanceAmount: number;
+  status: "open" | "partial" | "paid";
+};
+
+type CustomerCreditsPayload = {
+  rows: CustomerCreditRow[];
+  summary: {
+    creditAmount: number;
+    repaidAmount: number;
+    balanceAmount: number;
+    openCount: number;
+    partialCount: number;
+    paidCount: number;
+  };
+};
+
 type CategorySummaryEntry = {
   id: string | null;
   name: string;
@@ -373,6 +399,10 @@ export function ReportsPage() {
   const [liveCashLoading, setLiveCashLoading] = useState(false);
   const [liveCashMessage, setLiveCashMessage] = useState<string | null>(null);
   const [liveCashRegisters, setLiveCashRegisters] = useState<LiveCashRegisterCard[]>([]);
+  const [customerCreditsModalOpen, setCustomerCreditsModalOpen] = useState(false);
+  const [customerCreditsLoading, setCustomerCreditsLoading] = useState(false);
+  const [customerCreditsData, setCustomerCreditsData] = useState<CustomerCreditsPayload | null>(null);
+  const [customerCreditFilters, setCustomerCreditFilters] = useState({ query: "", status: "open", dateFrom: "", dateTo: "", warehouseId: "" });
 
   useEffect(() => {
     let cancelled = false;
@@ -1079,6 +1109,65 @@ export function ReportsPage() {
     await loadLiveCashRegisters();
   }
 
+  async function loadCustomerCreditsReport() {
+    setCustomerCreditsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (customerCreditFilters.query.trim()) params.set("query", customerCreditFilters.query.trim());
+      if (customerCreditFilters.status) params.set("status", customerCreditFilters.status);
+      if (customerCreditFilters.dateFrom) params.set("dateFrom", customerCreditFilters.dateFrom);
+      if (customerCreditFilters.dateTo) params.set("dateTo", customerCreditFilters.dateTo);
+      if (customerCreditFilters.warehouseId) params.set("warehouseId", customerCreditFilters.warehouseId);
+      const payload = await api<CustomerCreditsPayload>(`/pos/customer-credits?${params.toString()}`);
+      setCustomerCreditsData(payload);
+    } catch (error) {
+      setCustomerCreditsData(null);
+      setCashReportMessage(error instanceof Error ? error.message : "Chargement des credits clients impossible.");
+    } finally {
+      setCustomerCreditsLoading(false);
+    }
+  }
+
+  async function openCustomerCreditsReportModal() {
+    setCustomerCreditsModalOpen(true);
+    await loadCustomerCreditsReport();
+  }
+
+  function printCustomerCreditsReport() {
+    const rows = customerCreditsData?.rows ?? [];
+    const popup = window.open("", "_blank", "width=980,height=900");
+    if (!popup) return;
+    popup.document.open();
+    popup.document.write(`
+      <html>
+        <head>
+          <title>Credits clients</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #21160f; padding: 24px; }
+            h1 { margin: 0 0 6px; font-size: 24px; }
+            .muted { color: #7a685b; margin-bottom: 18px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { background: #2b1d14; color: white; padding: 9px; text-align: left; }
+            td { border-bottom: 1px solid #e4d2c3; padding: 9px; }
+            .right { text-align: right; }
+          </style>
+        </head>
+        <body>
+          <h1>Credits clients</h1>
+          <div class="muted">Imprime le ${new Date().toLocaleString("fr-FR")}</div>
+          <table>
+            <thead><tr><th>Ticket</th><th>Date</th><th>Client</th><th>Boutique</th><th>Statut</th><th class="right">Credit</th><th class="right">Rembourse</th><th class="right">Solde</th></tr></thead>
+            <tbody>
+              ${rows.map((row) => `<tr><td><strong>${row.saleNumber}</strong></td><td>${formatDate(row.createdAt)}</td><td>${row.customer.fullName}<br>${row.customer.phone ?? ""}</td><td>${row.warehouse.name}</td><td>${row.status === "paid" ? "Solde" : row.status === "partial" ? "Partiel" : "Ouvert"}</td><td class="right">${formatCurrency(row.creditAmount)}</td><td class="right">${formatCurrency(row.repaidAmount)}</td><td class="right">${formatCurrency(row.balanceAmount)}</td></tr>`).join("")}
+            </tbody>
+          </table>
+          <script>window.onload=function(){window.print();setTimeout(function(){window.close();},250);};</script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+  }
+
   if (summaryLoading || bootstrapLoading) {
     return <LoadingBlock label="Chargement des rapports..." />;
   }
@@ -1103,7 +1192,14 @@ export function ReportsPage() {
             </Button>
             <Button
               variant="secondary"
-              className="!border-emerald-300/35 !bg-emerald-400/10 !py-2 !text-sm !text-emerald-100 shadow-[0_0_0_1px_rgba(52,211,153,0.12)] animate-pulse"
+              className="!border-orange-300/35 !bg-orange-300/10 !py-2 !text-sm !text-orange-100"
+              onClick={() => void openCustomerCreditsReportModal()}
+            >
+              Credits clients
+            </Button>
+            <Button
+              variant="secondary"
+              className="!border-emerald-300/70 !bg-emerald-500/20 !py-2 !text-sm !font-bold !text-emerald-50 shadow-[0_0_22px_rgba(16,185,129,0.35)] animate-pulse"
               onClick={() => void openLiveCashModal()}
             >
               Caisse en direct
@@ -2188,6 +2284,81 @@ export function ReportsPage() {
               ) : (
                 <EmptyState title="Rapport caisse indisponible" description="Aucune donnee caisse n'est disponible pour ce filtre." compact />
               )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {customerCreditsModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-3 py-4 backdrop-blur-sm">
+          <div className="flex h-[100dvh] w-full max-w-[1180px] flex-col overflow-hidden rounded-none border-0 bg-[#17110d] p-3 shadow-2xl sm:h-[calc(100vh-1.5rem)] sm:max-h-[820px] sm:rounded-[30px] sm:border sm:border-white/15 sm:p-4 md:p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">Rapports / Credits clients</p>
+                <h2 className="mt-1 text-xl font-semibold text-white">Credits clients</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="secondary" className="!py-2 !text-sm" onClick={printCustomerCreditsReport} disabled={!customerCreditsData?.rows.length}>
+                  <Printer className="mr-2 h-4 w-4" /> Imprimer
+                </Button>
+                <button type="button" className="rounded-full border border-white/10 p-2 text-[#eadfd4]" onClick={() => setCustomerCreditsModalOpen(false)}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(240px,1fr)_170px_160px_160px_180px_auto]">
+              <Input value={customerCreditFilters.query} onChange={(event) => setCustomerCreditFilters((current) => ({ ...current, query: event.target.value }))} placeholder="Client, telephone, ticket..." />
+              <Select value={customerCreditFilters.status} onChange={(event) => setCustomerCreditFilters((current) => ({ ...current, status: event.target.value }))}>
+                <option value="all">Tous</option>
+                <option value="open">Ouverts</option>
+                <option value="partial">Partiels</option>
+                <option value="paid">Soldes</option>
+              </Select>
+              <Input type="date" value={customerCreditFilters.dateFrom} onChange={(event) => setCustomerCreditFilters((current) => ({ ...current, dateFrom: event.target.value }))} />
+              <Input type="date" value={customerCreditFilters.dateTo} onChange={(event) => setCustomerCreditFilters((current) => ({ ...current, dateTo: event.target.value }))} />
+              <Select value={customerCreditFilters.warehouseId} onChange={(event) => setCustomerCreditFilters((current) => ({ ...current, warehouseId: event.target.value }))}>
+                <option value="">Toutes boutiques</option>
+                {bootstrap.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+              </Select>
+              <Button type="button" onClick={() => void loadCustomerCreditsReport()} disabled={customerCreditsLoading}>
+                {customerCreditsLoading ? "Chargement..." : "Rechercher"}
+              </Button>
+            </div>
+
+            <div className="mb-4 grid gap-3 sm:grid-cols-3">
+              <StatCard label="Credits" value={formatCurrency(customerCreditsData?.summary.creditAmount ?? 0)} hint={`${formatNumber(customerCreditsData?.summary.openCount ?? 0)} ouvert(s)`} accent="orange" />
+              <StatCard label="Rembourse" value={formatCurrency(customerCreditsData?.summary.repaidAmount ?? 0)} hint={`${formatNumber(customerCreditsData?.summary.partialCount ?? 0)} partiel(s)`} accent="green" />
+              <StatCard label="Solde restant" value={formatCurrency(customerCreditsData?.summary.balanceAmount ?? 0)} hint={`${formatNumber(customerCreditsData?.summary.paidCount ?? 0)} solde(s)`} accent="red" />
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto rounded-[22px] border border-white/10 bg-black/20">
+              <table className="min-w-full text-sm text-[#eadfd4]">
+                <thead className="sticky top-0 z-10 bg-[#1f1712] text-[11px] uppercase tracking-[0.16em] text-[#cdbfaf]">
+                  <tr>
+                    <th className="px-3 py-3 text-left">Ticket</th>
+                    <th className="px-3 py-3 text-left">Client</th>
+                    <th className="px-3 py-3 text-left">Boutique</th>
+                    <th className="px-3 py-3 text-left">Statut</th>
+                    <th className="px-3 py-3 text-right">Credit</th>
+                    <th className="px-3 py-3 text-right">Rembourse</th>
+                    <th className="px-3 py-3 text-right">Solde</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10">
+                  {(customerCreditsData?.rows ?? []).map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-3"><div className="font-semibold text-white">{row.saleNumber}</div><div className="text-xs text-[#baa999]">{formatDate(row.createdAt)}</div></td>
+                      <td className="px-3 py-3"><div className="font-semibold text-white">{row.customer.fullName}</div><div className="text-xs text-[#baa999]">{row.customer.phone || "-"}</div></td>
+                      <td className="px-3 py-3">{row.warehouse.name}</td>
+                      <td className="px-3 py-3"><Badge tone={row.status === "paid" ? "success" : row.status === "partial" ? "warning" : "danger"}>{row.status === "paid" ? "Solde" : row.status === "partial" ? "Partiel" : "Ouvert"}</Badge></td>
+                      <td className="px-3 py-3 text-right font-semibold text-white">{formatCurrency(row.creditAmount)}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-emerald-100">{formatCurrency(row.repaidAmount)}</td>
+                      <td className="px-3 py-3 text-right font-bold text-orange-100">{formatCurrency(row.balanceAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!customerCreditsData?.rows.length ? <EmptyState title="Aucun credit client" description="Aucun credit ne correspond aux filtres." compact /> : null}
             </div>
           </div>
         </div>

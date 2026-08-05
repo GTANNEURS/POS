@@ -15,6 +15,7 @@ type Customer = {
   notes?: string | null;
   loyaltyPoints: number;
   discountRate: number;
+  creditLimit?: number | null;
   level: string;
   purchasesCount: number;
   sales: Array<{ totalAmount: number }>;
@@ -29,6 +30,7 @@ type CustomerForm = {
   notes: string;
   loyaltyPoints: string;
   discountRate: string;
+  creditLimit: string;
   level: string;
 };
 
@@ -41,6 +43,7 @@ const defaultForm: CustomerForm = {
   notes: "",
   loyaltyPoints: "0",
   discountRate: "0",
+  creditLimit: "",
   level: "Standard"
 };
 
@@ -86,6 +89,7 @@ function CustomerModal({
             <Field label="Ville"><Input value={form.city} onChange={(event) => onChange("city", event.target.value)} /></Field>
             <Field label="Points fidelite"><Input type="number" value={form.loyaltyPoints} onChange={(event) => onChange("loyaltyPoints", event.target.value)} /></Field>
             <Field label="Remise %"><Input type="number" step="0.01" value={form.discountRate} onChange={(event) => onChange("discountRate", event.target.value)} /></Field>
+            <Field label="Plafond credit"><Input type="number" step="0.01" value={form.creditLimit} onChange={(event) => onChange("creditLimit", event.target.value)} placeholder="Vide = sans plafond" /></Field>
           </div>
 
           <div className="grid gap-4 md:grid-cols-[1fr_180px]">
@@ -179,7 +183,8 @@ export function CustomersPage() {
       email: form.email || null,
       address: form.address || null,
       city: form.city || null,
-      notes: form.notes || null
+      notes: form.notes || null,
+      creditLimit: form.creditLimit.trim() ? Number(form.creditLimit) : null
     };
 
     try {

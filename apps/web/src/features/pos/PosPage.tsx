@@ -108,6 +108,44 @@ type VoucherLookup = {
   isActive: boolean;
   expiresAt?: string | null;
 };
+type CustomerCreditRepayment = {
+  id: string;
+  saleId: string;
+  saleNumber: string;
+  customerName: string;
+  warehouseName: string;
+  amount: number;
+  method: string;
+  reference?: string | null;
+  note?: string | null;
+  createdAt: string;
+  createdByName?: string | null;
+};
+type CustomerCreditRow = {
+  id: string;
+  saleId: string;
+  saleNumber: string;
+  createdAt: string;
+  customer: { id: string | null; fullName: string; phone?: string | null; email?: string | null };
+  warehouse: { id: string; name: string };
+  sellerName: string;
+  creditAmount: number;
+  repaidAmount: number;
+  balanceAmount: number;
+  status: "open" | "partial" | "paid";
+  repayments: CustomerCreditRepayment[];
+};
+type CustomerCreditsPayload = {
+  rows: CustomerCreditRow[];
+  summary: {
+    creditAmount: number;
+    repaidAmount: number;
+    balanceAmount: number;
+    openCount: number;
+    partialCount: number;
+    paidCount: number;
+  };
+};
 type CreditTicketPreview = {
   id: string;
   number: string;
@@ -502,6 +540,13 @@ export function PosPage() {
   const [paymentReferenceModalOpen, setPaymentReferenceModalOpen] = useState(false);
   const [paymentReferenceDraft, setPaymentReferenceDraft] = useState("");
   const [paymentReferenceMethod, setPaymentReferenceMethod] = useState<{ code: string; label: string; fieldLabel: string; title: string } | null>(null);
+  const [customerCreditsModalOpen, setCustomerCreditsModalOpen] = useState(false);
+  const [customerCreditsLoading, setCustomerCreditsLoading] = useState(false);
+  const [customerCreditsData, setCustomerCreditsData] = useState<CustomerCreditsPayload | null>(null);
+  const [customerCreditFilters, setCustomerCreditFilters] = useState({ query: "", status: "open", dateFrom: "", dateTo: "" });
+  const [selectedCustomerCreditId, setSelectedCustomerCreditId] = useState("");
+  const [customerCreditRepaymentForm, setCustomerCreditRepaymentForm] = useState({ repaymentId: "", amount: "", method: "CASH", reference: "", note: "" });
+  const [customerCreditSaving, setCustomerCreditSaving] = useState(false);
   const [cashReportModalOpen, setCashReportModalOpen] = useState(false);
   const [cashReportLoading, setCashReportLoading] = useState(false);
   const [cashReportType, setCashReportType] = useState<CashReportType>("X");
@@ -684,7 +729,17 @@ export function PosPage() {
   );
   const canManageCash = Boolean(user?.permissions.includes("cash_manage"));
   const canSeeCashAdmin = Boolean(user?.roles.includes("admin"));
+  const canManageCustomerCredits = Boolean(user?.roles.includes("admin") || user?.permissions.includes("sales_manage"));
   const isCashierSession = Boolean(user?.roles.includes("caissier")) && !canSeeCashAdmin;
+  const customerCreditRows = customerCreditsData?.rows ?? [];
+  const selectedCustomerCredit = useMemo(
+    () => customerCreditRows.find((row) => row.id === selectedCustomerCreditId) ?? customerCreditRows[0] ?? null,
+    [customerCreditRows, selectedCustomerCreditId]
+  );
+  const customerCreditPaymentMethods = useMemo(
+    () => activePaymentMethods.filter((method) => !isCreditPaymentMethod(method.code, method.label)),
+    [activePaymentMethods]
+  );
   const eurCurrency = useMemo(() => currencies.find((currency) => currency.code.toUpperCase() === "EUR") ?? null, [currencies]);
   const usdCurrency = useMemo(() => currencies.find((currency) => currency.code.toUpperCase() === "USD") ?? null, [currencies]);
   const paidAmount = useMemo(() => paymentEntries.reduce((sum, entry) => sum + entry.amountMad, 0), [paymentEntries]);
@@ -2668,6 +2723,181 @@ export function PosPage() {
     resetPaymentDraft(grandTotal - nextEntries.reduce((sum, item) => sum + item.amountMad, 0));
     setMessage(null);
   }
+
+  async function loadCustomerCredits(options: { keepSelection?: boolean } = {}) {
+    setCustomerCreditsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (customerCreditFilters.query.trim()) params.set("query", customerCreditFilters.query.trim());
+      if (customerCreditFilters.status) params.set("status", customerCreditFilters.status);
+      if (customerCreditFilters.dateFrom) params.set("dateFrom", customerCreditFilters.dateFrom);
+      if (customerCreditFilters.dateTo) params.set("dateTo", customerCreditFilters.dateTo);
+      if (form.warehouseId) params.set("warehouseId", form.warehouseId);
+      const payload = await api<CustomerCreditsPayload>(`/pos/customer-credits?${params.toString()}`);
+      setCustomerCreditsData(payload);
+      if (!options.keepSelection || !payload.rows.some((row) => row.id === selectedCustomerCreditId)) {
+        const first = payload.rows[0] ?? null;
+        setSelectedCustomerCreditId(first?.id ?? "");
+        setCustomerCreditRepaymentForm((current) => ({
+          ...current,
+          repaymentId: "",
+          amount: first ? String(first.balanceAmount) : "",
+          method: customerCreditPaymentMethods[0]?.code || "CASH",
+          reference: "",
+          note: ""
+        }));
+      }
+      setMessage(null);
+    } catch (error) {
+      setCustomerCreditsData(null);
+      setMessage(error instanceof Error ? error.message : "Chargement des credits clients impossible.");
+    } finally {
+      setCustomerCreditsLoading(false);
+    }
+  }
+
+  function openCustomerCreditsModal() {
+    setCustomerCreditFilters((current) => ({
+      ...current,
+      status: current.status || "open",
+      dateFrom: current.dateFrom,
+      dateTo: current.dateTo
+    }));
+    setCustomerCreditsModalOpen(true);
+    void loadCustomerCredits();
+  }
+
+  async function saveCustomerCreditRepayment() {
+    if (!selectedCustomerCredit) {
+      setMessage("Selectionne d'abord un credit client.");
+      return;
+    }
+    const amount = Number(customerCreditRepaymentForm.amount || 0);
+    if (amount <= 0) {
+      setMessage("Montant de remboursement obligatoire.");
+      return;
+    }
+    if (amount > selectedCustomerCredit.balanceAmount && !customerCreditRepaymentForm.repaymentId) {
+      setMessage("Le remboursement ne peut pas depasser le solde du credit.");
+      return;
+    }
+    setCustomerCreditSaving(true);
+    try {
+      const selectedMethod = activePaymentMethods.find((method) => method.code === customerCreditRepaymentForm.method);
+      const body = JSON.stringify({
+        amount,
+        method: normalizePaymentMethodForCheckout(customerCreditRepaymentForm.method, selectedMethod?.label),
+        reference: customerCreditRepaymentForm.reference || null,
+        note: customerCreditRepaymentForm.note || null
+      });
+      if (customerCreditRepaymentForm.repaymentId) {
+        await api<CustomerCreditRepayment>(`/pos/customer-credits/repayments/${encodeURIComponent(customerCreditRepaymentForm.repaymentId)}`, { method: "PUT", body });
+      } else {
+        await api<CustomerCreditRepayment>(`/pos/customer-credits/${encodeURIComponent(selectedCustomerCredit.saleId)}/repayments`, { method: "POST", body });
+      }
+      setCustomerCreditRepaymentForm({
+        repaymentId: "",
+        amount: "",
+        method: customerCreditPaymentMethods[0]?.code || "CASH",
+        reference: "",
+        note: ""
+      });
+      await loadCustomerCredits({ keepSelection: true });
+      if (cashReportModalOpen) void loadCashReport();
+      setMessage("Remboursement credit enregistre.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Remboursement credit impossible.");
+    } finally {
+      setCustomerCreditSaving(false);
+    }
+  }
+
+  function editCustomerCreditRepayment(repayment: CustomerCreditRepayment) {
+    setCustomerCreditRepaymentForm({
+      repaymentId: repayment.id,
+      amount: String(repayment.amount),
+      method: repayment.method,
+      reference: repayment.reference ?? "",
+      note: repayment.note ?? ""
+    });
+  }
+
+  async function deleteCustomerCreditRepayment(repayment: CustomerCreditRepayment) {
+    if (!window.confirm("Annuler ce remboursement credit ?")) return;
+    setCustomerCreditSaving(true);
+    try {
+      await api(`/pos/customer-credits/repayments/${encodeURIComponent(repayment.id)}`, { method: "DELETE" });
+      await loadCustomerCredits({ keepSelection: true });
+      if (cashReportModalOpen) void loadCashReport();
+      setMessage("Remboursement credit annule.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Annulation du remboursement impossible.");
+    } finally {
+      setCustomerCreditSaving(false);
+    }
+  }
+
+  function printCustomerCreditsList() {
+    const rows = customerCreditRows;
+    const popup = window.open("", "_blank", "width=980,height=900");
+    if (!popup) {
+      setMessage("Impossible d'ouvrir l'impression des credits clients.");
+      return;
+    }
+    const title = customerCreditFilters.query.trim()
+      ? `Credits clients - ${customerCreditFilters.query.trim()}`
+      : "Credits clients";
+    const period = customerCreditFilters.dateFrom || customerCreditFilters.dateTo
+      ? `${customerCreditFilters.dateFrom || "..."} au ${customerCreditFilters.dateTo || "..."}`
+      : "Toute la periode";
+    popup.document.open();
+    popup.document.write(`
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #1f1712; padding: 24px; }
+            h1 { margin: 0; font-size: 24px; }
+            .meta { margin: 6px 0 18px; color: #756457; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { background: #2b1d14; color: #fff; text-align: left; padding: 9px; }
+            td { border-bottom: 1px solid #e6d6c8; padding: 9px; vertical-align: top; }
+            .right { text-align: right; }
+            .summary { display: flex; gap: 10px; margin: 18px 0; }
+            .card { flex: 1; border: 1px solid #e6d6c8; border-radius: 14px; padding: 12px; }
+            .card span { display: block; color: #756457; font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
+            .card strong { font-size: 17px; }
+          </style>
+        </head>
+        <body>
+          <h1>${title}</h1>
+          <div class="meta">Periode: ${period} - Impression: ${new Date().toLocaleString("fr-FR")}</div>
+          <div class="summary">
+            <div class="card"><span>Total credits</span><strong>${formatCurrency(customerCreditsData?.summary.creditAmount ?? 0)}</strong></div>
+            <div class="card"><span>Rembourse</span><strong>${formatCurrency(customerCreditsData?.summary.repaidAmount ?? 0)}</strong></div>
+            <div class="card"><span>Solde</span><strong>${formatCurrency(customerCreditsData?.summary.balanceAmount ?? 0)}</strong></div>
+          </div>
+          <table>
+            <thead><tr><th>Ticket</th><th>Date</th><th>Client</th><th>Boutique</th><th>Statut</th><th class="right">Credit</th><th class="right">Rembourse</th><th class="right">Solde</th></tr></thead>
+            <tbody>
+              ${rows.map((row) => `<tr>
+                <td><strong>${row.saleNumber}</strong></td>
+                <td>${formatDate(row.createdAt)}</td>
+                <td>${row.customer.fullName}<br>${row.customer.phone ?? ""}</td>
+                <td>${row.warehouse.name}</td>
+                <td>${row.status === "paid" ? "Solde" : row.status === "partial" ? "Partiel" : "Ouvert"}</td>
+                <td class="right">${formatCurrency(row.creditAmount)}</td>
+                <td class="right">${formatCurrency(row.repaidAmount)}</td>
+                <td class="right">${formatCurrency(row.balanceAmount)}</td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+          <script>window.onload=function(){window.print();setTimeout(function(){window.close();},250);};</script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+  }
   function openCurrencyPaymentModal() {
     setCurrencyTenderDraft(String(Number((currencyDueAmount > 0 ? currencyDueAmount : grandTotal).toFixed(2))));
     setCurrencyTenderPrimed(true);
@@ -3132,12 +3362,12 @@ export function PosPage() {
             <div className="flex items-center gap-2 sm:justify-end">
               <button
                 type="button"
-                className="min-w-[64px] rounded-[14px] border border-orange-300/25 bg-orange-300/12 px-4 py-2 text-base font-bold text-white transition hover:border-orange-300/45 hover:bg-orange-300/18"
+                className="min-w-[64px] rounded-[14px] border border-amber-300/55 bg-amber-300/16 px-4 py-2 text-base font-bold text-white shadow-[0_0_0_1px_rgba(251,191,36,0.14),0_10px_24px_rgba(251,146,60,0.12)] transition hover:border-amber-200 hover:bg-amber-300/24"
                 onClick={() => openQuantityModal(line)}
               >
                 {line.quantity}
               </button>
-              <button type="button" className="rounded-full border border-white/10 p-2 text-[#e9dbcf] transition hover:border-rose-300/30 hover:text-rose-100" onClick={() => setCart((current) => current.filter((item) => item.lineId !== line.lineId))}><Trash2 className="h-4 w-4" /></button>
+              <button type="button" className="rounded-full border border-rose-300/35 bg-rose-500/14 p-2 text-rose-100 shadow-[0_0_0_1px_rgba(244,63,94,0.10)] transition hover:border-rose-200 hover:bg-rose-500/24 hover:text-white" onClick={() => setCart((current) => current.filter((item) => item.lineId !== line.lineId))}><Trash2 className="h-4 w-4" /></button>
             </div>
           </div>
         ))}
@@ -3306,9 +3536,14 @@ export function PosPage() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">POS / Rapports caisse</p>
               </div>
-              <button type="button" className="rounded-full border border-white/10 p-2 text-[#eadfd4]" onClick={() => setCashReportModalOpen(false)}>
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button type="button" className="rounded-full border border-orange-300/25 bg-orange-300/10 px-4 py-2 text-xs font-semibold text-orange-100 transition hover:bg-orange-300/20" onClick={openCustomerCreditsModal}>
+                  Credits clients
+                </button>
+                <button type="button" className="rounded-full border border-white/10 p-2 text-[#eadfd4]" onClick={() => setCashReportModalOpen(false)}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             <div className="mb-4 flex flex-wrap gap-2">
@@ -3899,6 +4134,200 @@ export function PosPage() {
               </div>
             </div>
             <div className="mt-4 flex flex-col-reverse gap-2 border-t border-white/10 pt-3 sm:flex-row sm:justify-end"><Button type="button" variant="secondary" onClick={() => setCheckoutModalOpen(false)}>Annuler</Button><Button type="button" onClick={() => void checkout()} disabled={!paymentEntries.length || saving || paidAmount < grandTotal}>{saving ? "Validation..." : "Valider l'encaissement"}</Button></div>
+          </div>
+        </div>
+      ) : null}
+      {customerCreditsModalOpen ? (
+        <div className="fixed inset-0 z-[62] flex items-center justify-center bg-black/80 px-3 py-4 backdrop-blur-sm">
+          <div className="flex h-[96dvh] w-full max-w-[1280px] flex-col overflow-hidden rounded-[30px] border border-orange-300/20 bg-[#17110d] p-4 shadow-2xl">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">POS / Credits clients</p>
+                <h2 className="mt-1 text-2xl font-semibold text-white">Liste et remboursements credits</h2>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="secondary" className="!px-4" onClick={() => void loadCustomerCredits({ keepSelection: true })} disabled={customerCreditsLoading}>
+                  Actualiser
+                </Button>
+                <Button type="button" variant="secondary" className="!px-4" onClick={printCustomerCreditsList} disabled={!customerCreditRows.length}>
+                  <Printer className="mr-2 h-4 w-4" /> Imprimer liste
+                </Button>
+                <button type="button" className="rounded-full border border-white/10 p-2 text-[#eadfd4]" onClick={() => setCustomerCreditsModalOpen(false)}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-4 grid gap-3 md:grid-cols-[minmax(220px,1.1fr)_140px_150px_150px_auto]">
+              <Input
+                value={customerCreditFilters.query}
+                onChange={(event) => setCustomerCreditFilters((current) => ({ ...current, query: event.target.value }))}
+                placeholder="Rechercher client, telephone, ticket..."
+              />
+              <select
+                className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
+                value={customerCreditFilters.status}
+                onChange={(event) => setCustomerCreditFilters((current) => ({ ...current, status: event.target.value }))}
+              >
+                <option value="all">Tous</option>
+                <option value="open">Ouverts</option>
+                <option value="partial">Partiels</option>
+                <option value="paid">Soldes</option>
+              </select>
+              <Input type="date" value={customerCreditFilters.dateFrom} onChange={(event) => setCustomerCreditFilters((current) => ({ ...current, dateFrom: event.target.value }))} />
+              <Input type="date" value={customerCreditFilters.dateTo} onChange={(event) => setCustomerCreditFilters((current) => ({ ...current, dateTo: event.target.value }))} />
+              <Button type="button" onClick={() => void loadCustomerCredits()} disabled={customerCreditsLoading}>Rechercher</Button>
+            </div>
+
+            <div className="mb-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-[20px] border border-orange-300/20 bg-orange-300/10 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-orange-100/80">Credits</p>
+                <p className="mt-1 text-lg font-bold text-white">{formatCurrency(customerCreditsData?.summary.creditAmount ?? 0)}</p>
+              </div>
+              <div className="rounded-[20px] border border-emerald-300/20 bg-emerald-300/10 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-100/80">Rembourse</p>
+                <p className="mt-1 text-lg font-bold text-white">{formatCurrency(customerCreditsData?.summary.repaidAmount ?? 0)}</p>
+              </div>
+              <div className="rounded-[20px] border border-rose-300/20 bg-rose-300/10 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-rose-100/80">Solde restant</p>
+                <p className="mt-1 text-lg font-bold text-white">{formatCurrency(customerCreditsData?.summary.balanceAmount ?? 0)}</p>
+              </div>
+            </div>
+
+            <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(330px,0.7fr)]">
+              <div className="min-h-0 overflow-hidden rounded-[24px] border border-white/10 bg-black/20">
+                <div className="max-h-full overflow-auto">
+                  <table className="min-w-full text-sm text-[#eadfd4]">
+                    <thead className="sticky top-0 z-10 bg-[#24170f] text-xs uppercase tracking-[0.2em] text-[#f8e7d3]">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Ticket</th>
+                        <th className="px-4 py-3 text-left">Client</th>
+                        <th className="px-4 py-3 text-left">Boutique</th>
+                        <th className="px-4 py-3 text-right">Credit</th>
+                        <th className="px-4 py-3 text-right">Rembourse</th>
+                        <th className="px-4 py-3 text-right">Solde</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10">
+                      {customerCreditRows.map((row) => (
+                        <tr
+                          key={row.id}
+                          className={`cursor-pointer transition ${selectedCustomerCredit?.id === row.id ? "bg-orange-300/12" : "hover:bg-white/5"}`}
+                          onClick={() => {
+                            setSelectedCustomerCreditId(row.id);
+                            setCustomerCreditRepaymentForm({
+                              repaymentId: "",
+                              amount: row.balanceAmount > 0 ? String(row.balanceAmount) : "",
+                              method: customerCreditPaymentMethods[0]?.code || "CASH",
+                              reference: "",
+                              note: ""
+                            });
+                          }}
+                        >
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-white">{row.saleNumber}</p>
+                            <p className="text-xs text-[#baa999]">{formatDate(row.createdAt)}</p>
+                            <span className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${row.status === "paid" ? "bg-emerald-300/15 text-emerald-100" : row.status === "partial" ? "bg-orange-300/15 text-orange-100" : "bg-rose-300/15 text-rose-100"}`}>
+                              {row.status === "paid" ? "Solde" : row.status === "partial" ? "Partiel" : "Ouvert"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-white">{row.customer.fullName}</p>
+                            <p className="text-xs text-[#baa999]">{row.customer.phone || "-"}</p>
+                          </td>
+                          <td className="px-4 py-3">{row.warehouse.name}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-white">{formatCurrency(row.creditAmount)}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-emerald-100">{formatCurrency(row.repaidAmount)}</td>
+                          <td className="px-4 py-3 text-right font-bold text-orange-100">{formatCurrency(row.balanceAmount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {!customerCreditRows.length ? (
+                    <div className="p-8 text-center text-sm text-[#baa999]">{customerCreditsLoading ? "Chargement..." : "Aucun credit client trouve pour ces criteres."}</div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="min-h-0 overflow-auto rounded-[24px] border border-white/10 bg-black/20 p-4">
+                {selectedCustomerCredit ? (
+                  <div className="space-y-4">
+                    <div className="rounded-[20px] border border-orange-300/20 bg-orange-300/10 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-orange-100/80">Credit selectionne</p>
+                      <h3 className="mt-1 text-lg font-bold text-white">{selectedCustomerCredit.saleNumber}</h3>
+                      <p className="mt-1 text-sm text-[#eadfd4]">{selectedCustomerCredit.customer.fullName} - {selectedCustomerCredit.warehouse.name}</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                        <div className="rounded-2xl bg-black/25 p-2"><span className="block text-[#baa999]">Credit</span><strong className="text-white">{formatCurrency(selectedCustomerCredit.creditAmount)}</strong></div>
+                        <div className="rounded-2xl bg-black/25 p-2"><span className="block text-[#baa999]">Regle</span><strong className="text-emerald-100">{formatCurrency(selectedCustomerCredit.repaidAmount)}</strong></div>
+                        <div className="rounded-2xl bg-black/25 p-2"><span className="block text-[#baa999]">Solde</span><strong className="text-orange-100">{formatCurrency(selectedCustomerCredit.balanceAmount)}</strong></div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#cdbfaf]">Remboursement</p>
+                      <div className="grid gap-3">
+                        <Field label="Montant">
+                          <Input value={customerCreditRepaymentForm.amount} onChange={(event) => setCustomerCreditRepaymentForm((current) => ({ ...current, amount: event.target.value }))} />
+                        </Field>
+                        <Field label="Mode de paiement">
+                          <select
+                            className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white outline-none"
+                            value={customerCreditRepaymentForm.method}
+                            onChange={(event) => setCustomerCreditRepaymentForm((current) => ({ ...current, method: event.target.value }))}
+                          >
+                            {customerCreditPaymentMethods.map((method) => (
+                              <option key={method.id} value={method.code}>{method.label}</option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="Reference">
+                          <Input value={customerCreditRepaymentForm.reference} onChange={(event) => setCustomerCreditRepaymentForm((current) => ({ ...current, reference: event.target.value }))} placeholder="Cheque, virement, note..." />
+                        </Field>
+                        <Field label="Note">
+                          <Input value={customerCreditRepaymentForm.note} onChange={(event) => setCustomerCreditRepaymentForm((current) => ({ ...current, note: event.target.value }))} />
+                        </Field>
+                        <div className="flex gap-2">
+                          <Button type="button" className="flex-1" onClick={() => void saveCustomerCreditRepayment()} disabled={customerCreditSaving || selectedCustomerCredit.balanceAmount <= 0}>
+                            {customerCreditSaving ? "Enregistrement..." : customerCreditRepaymentForm.repaymentId ? "Modifier" : "Rembourser"}
+                          </Button>
+                          {customerCreditRepaymentForm.repaymentId ? (
+                            <Button type="button" variant="secondary" onClick={() => setCustomerCreditRepaymentForm({ repaymentId: "", amount: String(selectedCustomerCredit.balanceAmount), method: customerCreditPaymentMethods[0]?.code || "CASH", reference: "", note: "" })}>
+                              Annuler
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#cdbfaf]">Historique remboursements</p>
+                      <div className="space-y-2">
+                        {selectedCustomerCredit.repayments.map((repayment) => (
+                          <div key={repayment.id} className="rounded-2xl border border-white/10 bg-black/25 p-3 text-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-white">{formatCurrency(repayment.amount)} - {formatPosPaymentMethodLabel(repayment.method)}</p>
+                                <p className="text-xs text-[#baa999]">{formatDate(repayment.createdAt)} par {repayment.createdByName || "-"}</p>
+                                {repayment.reference ? <p className="mt-1 text-xs text-[#eadfd4]">Ref: {repayment.reference}</p> : null}
+                              </div>
+                              {canManageCustomerCredits ? (
+                                <div className="flex gap-1">
+                                  <button type="button" className="rounded-full border border-white/10 px-2 py-1 text-[11px] font-semibold text-orange-100" onClick={() => editCustomerCreditRepayment(repayment)}>Modifier</button>
+                                  <button type="button" className="rounded-full border border-rose-300/20 bg-rose-400/10 px-2 py-1 text-[11px] font-semibold text-rose-100" onClick={() => void deleteCustomerCreditRepayment(repayment)}><Trash2 className="h-3.5 w-3.5" /></button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                        {!selectedCustomerCredit.repayments.length ? <p className="text-sm text-[#baa999]">Aucun remboursement enregistre.</p> : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyState title="Aucun credit selectionne" description="Recherche un client ou une periode pour afficher les credits a rembourser." />
+                )}
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

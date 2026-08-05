@@ -115,6 +115,20 @@ const creditCreateSchema = z.object({
     quantity: z.coerce.number().int().positive()
   })).min(1)
 });
+const customerCreditQuerySchema = z.object({
+  query: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  status: z.enum(["all", "open", "partial", "paid"]).optional().default("all"),
+  customerId: z.string().optional(),
+  warehouseId: z.string().optional()
+});
+const customerCreditRepaymentSchema = z.object({
+  amount: z.coerce.number().positive(),
+  method: z.string().min(1),
+  reference: z.string().optional().nullable(),
+  note: z.string().optional().nullable()
+});
 
 export const posRouter = Router();
 posRouter.use(authenticate);
@@ -124,6 +138,7 @@ const __dirname = dirname(__filename);
 const legacyOrderLookupScript = resolve(__dirname, "../../../../../../legacy_order_lookup.php");
 const phpBinary = existsSync("C:\\xampp\\php\\php.exe") ? "C:\\xampp\\php\\php.exe" : "php";
 const SALES_DOCUMENTS_KEY = "sales_documents_store";
+const CUSTOMER_CREDIT_REPAYMENTS_KEY = "pos_customer_credit_repayments";
 const fallbackRateFromMad: Record<string, number> = {
   MAD: 1,
   EUR: 0.09206,
@@ -200,6 +215,97 @@ async function savePosCreditStore(tx: Pick<typeof prisma, "setting"> | Prisma.Tr
     create: { key: SALES_DOCUMENTS_KEY, value: store },
     update: { value: store }
   });
+}
+
+const customerCreditRepaymentEntrySchema = z.object({
+  id: z.string(),
+  saleId: z.string(),
+  saleNumber: z.string(),
+  customerId: z.string().nullable().optional(),
+  customerName: z.string(),
+  warehouseId: z.string(),
+  warehouseName: z.string(),
+  amount: z.number(),
+  method: z.string(),
+  reference: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  createdAt: z.string(),
+  createdById: z.string().nullable().optional(),
+  createdByName: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+  updatedById: z.string().nullable().optional(),
+  deletedAt: z.string().nullable().optional(),
+  deletedById: z.string().nullable().optional()
+});
+const customerCreditRepaymentStoreSchema = z.array(customerCreditRepaymentEntrySchema).default([]);
+type CustomerCreditRepaymentEntry = z.infer<typeof customerCreditRepaymentEntrySchema>;
+
+function parseCustomerCreditRepaymentStore(value: unknown): CustomerCreditRepaymentEntry[] {
+  const parsed = customerCreditRepaymentStoreSchema.safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
+async function loadCustomerCreditRepayments(tx: Pick<typeof prisma, "setting"> | Prisma.TransactionClient) {
+  const setting = await tx.setting.findUnique({ where: { key: CUSTOMER_CREDIT_REPAYMENTS_KEY } });
+  return parseCustomerCreditRepaymentStore(setting?.value);
+}
+
+async function saveCustomerCreditRepayments(tx: Pick<typeof prisma, "setting"> | Prisma.TransactionClient, entries: CustomerCreditRepaymentEntry[]) {
+  await tx.setting.upsert({
+    where: { key: CUSTOMER_CREDIT_REPAYMENTS_KEY },
+    create: { key: CUSTOMER_CREDIT_REPAYMENTS_KEY, value: entries },
+    update: { value: entries }
+  });
+}
+
+function normalizeCustomerCreditRepaymentMethod(method: string) {
+  const normalized = String(method || "").trim().toUpperCase().replace(/\s+/g, "_");
+  const allowed = new Set(["CASH", "CARD", "TRANSFER", "CHEQUE", "VOUCHER", "FOREIGN_CURRENCY", "MIXED"]);
+  if (!allowed.has(normalized)) {
+    throw new AppError("Mode de remboursement credit invalide.", 422);
+  }
+  return normalized;
+}
+
+function getCustomerCreditRepaymentWindow(entries: CustomerCreditRepaymentEntry[], dateStart: Date, dateEnd: Date, warehouseId?: string | null) {
+  return entries.filter((entry) => {
+    if (entry.deletedAt) return false;
+    if (warehouseId && entry.warehouseId !== warehouseId) return false;
+    const createdAt = new Date(entry.createdAt);
+    return createdAt >= dateStart && createdAt <= dateEnd;
+  });
+}
+
+function sumActiveRepayments(entries: CustomerCreditRepaymentEntry[], saleId: string, ignoreEntryId?: string) {
+  return entries
+    .filter((entry) => !entry.deletedAt && entry.saleId === saleId && entry.id !== ignoreEntryId)
+    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+}
+
+async function getCustomerCreditBalance(tx: Pick<typeof prisma, "sale" | "setting" | "customer"> | Prisma.TransactionClient, customerId: string) {
+  const [creditSales, repayments] = await Promise.all([
+    tx.sale.findMany({
+      where: {
+        customerId,
+        payments: { some: { method: "CREDIT", direction: "IN" } }
+      },
+      select: {
+        id: true,
+        payments: true
+      }
+    }),
+    loadCustomerCreditRepayments(tx)
+  ]);
+  const creditAmount = creditSales.reduce((sum, sale) => (
+    sum + sale.payments
+      .filter((payment) => payment.direction === "IN" && payment.method === "CREDIT")
+      .reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0)
+  ), 0);
+  const saleIds = new Set(creditSales.map((sale) => sale.id));
+  const repaidAmount = repayments
+    .filter((entry) => !entry.deletedAt && (entry.customerId === customerId || saleIds.has(entry.saleId)))
+    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  return Number(Math.max(0, creditAmount - repaidAmount).toFixed(2));
 }
 
 function buildPosCreditNumber(store: PosCreditStore, date = new Date()) {
@@ -1226,7 +1332,7 @@ posRouter.get("/reports/cash", requirePermissions("pos_use"), asyncHandler(async
         .filter((value): value is string => Boolean(value))
     : [];
 
-  const [session, sales, checkoutLogs] = await Promise.all([
+  const [session, sales, checkoutLogs, customerCreditRepayments] = await Promise.all([
     prisma.cashSession.findFirst({
       where: {
         register: register ? { id: register.id } : { warehouseId },
@@ -1279,7 +1385,8 @@ posRouter.get("/reports/cash", requirePermissions("pos_use"), asyncHandler(async
         entityId: true,
         metadata: true
       }
-    })
+    }),
+    loadCustomerCreditRepayments(prisma)
   ]);
 
   const openingLog = session
@@ -1419,6 +1526,18 @@ posRouter.get("/reports/cash", requirePermissions("pos_use"), asyncHandler(async
       currentCategory.articles.set(item.productId, currentArticle);
       categorySummaryMap.set(categoryKey, currentCategory);
     }
+  }
+
+  for (const repayment of getCustomerCreditRepaymentWindow(customerCreditRepayments, dateStart, dateEnd, warehouseId)) {
+    const method = normalizeCustomerCreditRepaymentMethod(repayment.method);
+    const current = paymentSummaryMap.get(method) ?? {
+      method,
+      label: formatPaymentMethodLabel(method, paymentLabels),
+      amount: 0
+    };
+    current.amount += Number(repayment.amount || 0);
+    paymentSummaryMap.set(method, current);
+    paidAmount += Number(repayment.amount || 0);
   }
 
   const paymentSummary = Array.from(paymentSummaryMap.values())
@@ -3011,6 +3130,227 @@ posRouter.post("/credits", requirePermissions("pos_use"), asyncHandler(async (re
   return ok(res, result, "Bon d'avoir client cree.");
 }));
 
+posRouter.get("/customer-credits", requirePermissions("pos_use"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const query = customerCreditQuerySchema.parse(req.query ?? {});
+  const scopedWarehouseId = getScopedWarehouseId(req.currentUser);
+  const warehouseId = query.warehouseId || scopedWarehouseId || null;
+  if (warehouseId) ensureWarehouseAccess(req.currentUser, warehouseId);
+
+  const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(query.dateFrom ?? "")) ? String(query.dateFrom) : "";
+  const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(String(query.dateTo ?? "")) ? String(query.dateTo) : "";
+  const dateFilter = dateFrom || dateTo
+    ? {
+        createdAt: {
+          ...(dateFrom ? { gte: buildDateStart(dateFrom) } : {}),
+          ...(dateTo ? { lte: buildDateEnd(dateTo) } : {})
+        }
+      }
+    : {};
+
+  const [sales, repaymentStore] = await Promise.all([
+    prisma.sale.findMany({
+      where: {
+        ...(warehouseId ? { warehouseId } : {}),
+        ...(query.customerId ? { customerId: query.customerId } : {}),
+        ...dateFilter,
+        payments: { some: { method: "CREDIT", direction: "IN" } }
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        customer: { select: { id: true, fullName: true, phone: true, email: true } },
+        warehouse: { select: { id: true, name: true } },
+        payments: true
+      }
+    }),
+    loadCustomerCreditRepayments(prisma)
+  ]);
+
+  const search = String(query.query ?? "").trim().toLowerCase();
+  const rows = sales.map((sale) => {
+    const creditAmount = sale.payments
+      .filter((payment) => payment.direction === "IN" && payment.method === "CREDIT")
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const repayments = repaymentStore
+      .filter((entry) => !entry.deletedAt && entry.saleId === sale.id)
+      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+    const repaidAmount = repayments.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+    const balanceAmount = Number(Math.max(0, creditAmount - repaidAmount).toFixed(2));
+    const status = balanceAmount <= 0.009 ? "paid" : repaidAmount > 0 ? "partial" : "open";
+    return {
+      id: sale.id,
+      saleId: sale.id,
+      saleNumber: sale.number,
+      createdAt: sale.createdAt,
+      customer: sale.customer
+        ? { id: sale.customer.id, fullName: sale.customer.fullName, phone: sale.customer.phone, email: sale.customer.email }
+        : { id: null, fullName: "Client non renseigne", phone: null, email: null },
+      warehouse: { id: sale.warehouse.id, name: sale.warehouse.name },
+      sellerName: sale.sellerName ?? "Non renseigne",
+      creditAmount: Number(creditAmount.toFixed(2)),
+      repaidAmount: Number(repaidAmount.toFixed(2)),
+      balanceAmount,
+      status,
+      repayments
+    };
+  }).filter((row) => {
+    if (query.status !== "all" && row.status !== query.status) return false;
+    if (!search) return true;
+    return [
+      row.saleNumber,
+      row.customer.fullName,
+      row.customer.phone ?? "",
+      row.customer.email ?? "",
+      row.warehouse.name,
+      row.sellerName
+    ].some((value) => String(value).toLowerCase().includes(search));
+  });
+
+  const summary = rows.reduce((acc, row) => {
+    acc.creditAmount += row.creditAmount;
+    acc.repaidAmount += row.repaidAmount;
+    acc.balanceAmount += row.balanceAmount;
+    if (row.status === "open") acc.openCount += 1;
+    if (row.status === "partial") acc.partialCount += 1;
+    if (row.status === "paid") acc.paidCount += 1;
+    return acc;
+  }, { creditAmount: 0, repaidAmount: 0, balanceAmount: 0, openCount: 0, partialCount: 0, paidCount: 0 });
+
+  return ok(res, {
+    rows,
+    summary: {
+      ...summary,
+      creditAmount: Number(summary.creditAmount.toFixed(2)),
+      repaidAmount: Number(summary.repaidAmount.toFixed(2)),
+      balanceAmount: Number(summary.balanceAmount.toFixed(2))
+    }
+  });
+}));
+
+posRouter.post("/customer-credits/:saleId/repayments", requirePermissions("pos_use"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const payload = customerCreditRepaymentSchema.parse(req.body);
+  const method = normalizeCustomerCreditRepaymentMethod(payload.method);
+  const saleId = String(req.params.saleId ?? "");
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    include: {
+      customer: { select: { id: true, fullName: true } },
+      warehouse: { select: { id: true, name: true } },
+      payments: true
+    }
+  });
+  if (!sale) throw new AppError("Credit client introuvable.", 404);
+  ensureWarehouseAccess(req.currentUser, sale.warehouseId);
+  const creditAmount = sale.payments
+    .filter((payment) => payment.direction === "IN" && payment.method === "CREDIT")
+    .reduce((sum, payment) => sum + Number(payment.amount), 0);
+  if (creditAmount <= 0) throw new AppError("Ce ticket n'est pas un credit client.", 422);
+
+  const repayment = await prisma.$transaction(async (tx) => {
+    const entries = await loadCustomerCreditRepayments(tx);
+    const alreadyRepaid = sumActiveRepayments(entries, sale.id);
+    const balance = Number(Math.max(0, creditAmount - alreadyRepaid).toFixed(2));
+    if (payload.amount > balance + 0.009) {
+      throw new AppError(`Montant superieur au solde restant (${balance.toFixed(2)} MAD).`, 422);
+    }
+    const entry: CustomerCreditRepaymentEntry = {
+      id: `CCR-${Date.now()}-${Math.round(Math.random() * 1000)}`,
+      saleId: sale.id,
+      saleNumber: sale.number,
+      customerId: sale.customerId ?? null,
+      customerName: sale.customer?.fullName ?? "Client non renseigne",
+      warehouseId: sale.warehouse.id,
+      warehouseName: sale.warehouse.name,
+      amount: Number(payload.amount.toFixed(2)),
+      method,
+      reference: payload.reference?.trim() || null,
+      note: payload.note?.trim() || null,
+      createdAt: new Date().toISOString(),
+      createdById: req.currentUser?.id ?? null,
+      createdByName: req.currentUser?.fullName ?? null
+    };
+    await saveCustomerCreditRepayments(tx, [entry, ...entries]);
+    return entry;
+  });
+
+  await writeAuditLog({
+    userId: req.currentUser?.id,
+    action: "pos.customer_credit.repayment.create",
+    entityType: "sale",
+    entityId: sale.id,
+    meta: repayment
+  });
+  return ok(res.status(201), repayment);
+}));
+
+posRouter.put("/customer-credits/repayments/:repaymentId", requirePermissions("sales_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const payload = customerCreditRepaymentSchema.parse(req.body);
+  const method = normalizeCustomerCreditRepaymentMethod(payload.method);
+  const repaymentId = String(req.params.repaymentId ?? "");
+  const updated = await prisma.$transaction(async (tx) => {
+    const entries = await loadCustomerCreditRepayments(tx);
+    const index = entries.findIndex((entry) => entry.id === repaymentId && !entry.deletedAt);
+    if (index < 0) throw new AppError("Remboursement introuvable.", 404);
+    const current = entries[index];
+    ensureWarehouseAccess(req.currentUser, current.warehouseId);
+    const sale = await tx.sale.findUnique({ where: { id: current.saleId }, include: { payments: true } });
+    if (!sale) throw new AppError("Ticket credit introuvable.", 404);
+    const creditAmount = sale.payments
+      .filter((payment) => payment.direction === "IN" && payment.method === "CREDIT")
+      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const alreadyRepaid = sumActiveRepayments(entries, current.saleId, current.id);
+    if (payload.amount > Number((creditAmount - alreadyRepaid).toFixed(2)) + 0.009) {
+      throw new AppError("Montant superieur au solde restant du credit.", 422);
+    }
+    const nextEntry: CustomerCreditRepaymentEntry = {
+      ...current,
+      amount: Number(payload.amount.toFixed(2)),
+      method,
+      reference: payload.reference?.trim() || null,
+      note: payload.note?.trim() || null,
+      updatedAt: new Date().toISOString(),
+      updatedById: req.currentUser?.id ?? null
+    };
+    entries[index] = nextEntry;
+    await saveCustomerCreditRepayments(tx, entries);
+    return { before: current, after: nextEntry };
+  });
+  await writeAuditLog({
+    userId: req.currentUser?.id,
+    action: "pos.customer_credit.repayment.update",
+    entityType: "customer_credit_repayment",
+    entityId: repaymentId,
+    meta: updated
+  });
+  return ok(res, updated.after);
+}));
+
+posRouter.delete("/customer-credits/repayments/:repaymentId", requirePermissions("sales_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const repaymentId = String(req.params.repaymentId ?? "");
+  const deleted = await prisma.$transaction(async (tx) => {
+    const entries = await loadCustomerCreditRepayments(tx);
+    const index = entries.findIndex((entry) => entry.id === repaymentId && !entry.deletedAt);
+    if (index < 0) throw new AppError("Remboursement introuvable.", 404);
+    const current = entries[index];
+    ensureWarehouseAccess(req.currentUser, current.warehouseId);
+    const nextEntry: CustomerCreditRepaymentEntry = {
+      ...current,
+      deletedAt: new Date().toISOString(),
+      deletedById: req.currentUser?.id ?? null
+    };
+    entries[index] = nextEntry;
+    await saveCustomerCreditRepayments(tx, entries);
+    return { before: current, after: nextEntry };
+  });
+  await writeAuditLog({
+    userId: req.currentUser?.id,
+    action: "pos.customer_credit.repayment.delete",
+    entityType: "customer_credit_repayment",
+    entityId: repaymentId,
+    meta: deleted
+  });
+  return ok(res, { id: repaymentId });
+}));
+
 posRouter.get("/vouchers/:number", requirePermissions("pos_use"), asyncHandler(async (req, res) => {
   const number = normalizeVoucherNumber(String(req.params.number ?? ""));
   if (!number) throw new AppError("Numero de bon achat obligatoire.", 422);
@@ -3338,6 +3678,25 @@ posRouter.post("/checkout", requirePermissions("pos_use"), asyncHandler(async (r
     const totalAmount = computedItems.reduce((sum, item) => sum + item.lineTotal, 0) + shippingFee;
     const paidAmount = payload.payments.reduce((sum, payment) => sum + payment.amount, 0);
     const status = paidAmount >= totalAmount ? "PAID" : paidAmount > 0 ? "PARTIAL" : "UNPAID";
+    const creditPaymentAmount = payload.payments
+      .filter((payment) => String(payment.method).trim().toUpperCase() === "CREDIT")
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    if (creditPaymentAmount > 0) {
+      if (!payload.customerId) throw new AppError("Client obligatoire pour un paiement credit.", 422);
+      const customer = await tx.customer.findUnique({
+        where: { id: payload.customerId },
+        select: { id: true, fullName: true, creditLimit: true }
+      });
+      if (!customer) throw new AppError("Client introuvable pour le credit.", 404);
+      if (customer.creditLimit != null) {
+        const currentCreditBalance = await getCustomerCreditBalance(tx, customer.id);
+        const nextCreditBalance = Number((currentCreditBalance + creditPaymentAmount).toFixed(2));
+        const creditLimit = Number(customer.creditLimit);
+        if (nextCreditBalance > creditLimit + 0.009) {
+          throw new AppError(`Plafond credit depasse pour ${customer.fullName}. Plafond: ${creditLimit.toFixed(2)} MAD, solde apres ticket: ${nextCreditBalance.toFixed(2)} MAD.`, 422);
+        }
+      }
+    }
     const saleNote = [payload.note, ...orderNotes].filter(Boolean).join("\n") || null;
     const createdSale = await tx.sale.create({ data: { number, customerId: payload.customerId, warehouseId: payload.warehouseId, createdById: req.currentUser!.id, transporterId: payload.transporterId || null, sellerName: payload.sellerName, status, subtotal, discountAmount: computedItems.reduce((sum, item) => sum + item.discountAmount, 0), taxAmount, shippingFee, totalAmount, paidAmount, note: saleNote, items: { create: computedItems.map((item) => ({ productId: item.productId, quantity: item.quantity, unitPriceHt: item.unitPriceHt, unitPriceTtc: item.unitPriceTtc, discountAmount: item.discountAmount, taxRate: item.taxRate, lineTotal: item.lineTotal })) }, payments: { create: payload.payments.map((payment) => ({ amount: payment.amount, method: payment.method as PaymentMethod, direction: "IN", reference: payment.reference ? String(payment.reference).trim() : null })) } }, include: { items: true, payments: true, transporter: true } });
 

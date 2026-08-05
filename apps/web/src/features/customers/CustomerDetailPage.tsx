@@ -14,6 +14,7 @@ type CustomerForm = {
   notes: string;
   loyaltyPoints: string;
   discountRate: string;
+  creditLimit: string;
   level: string;
 };
 
@@ -29,6 +30,16 @@ type CustomerDetail = {
   discountRate: number;
   level: string;
   balanceDue: number;
+  creditLimit?: number | null;
+  creditStatus?: {
+    creditAmount: number;
+    repaidAmount: number;
+    balanceAmount: number;
+    limitAmount: number | null;
+    availableAmount: number | null;
+    isUnlimited: boolean;
+    isExceeded: boolean;
+  };
   createdAt: string;
   purchasesCount: number;
   totalSpent: number;
@@ -70,6 +81,7 @@ const defaultForm: CustomerForm = {
   notes: "",
   loyaltyPoints: "0",
   discountRate: "0",
+  creditLimit: "",
   level: "Standard"
 };
 
@@ -115,6 +127,7 @@ function CustomerModal({
             <Field label="Ville"><Input value={form.city} onChange={(event) => onChange("city", event.target.value)} /></Field>
             <Field label="Points fidelite"><Input type="number" value={form.loyaltyPoints} onChange={(event) => onChange("loyaltyPoints", event.target.value)} /></Field>
             <Field label="Remise %"><Input type="number" step="0.01" value={form.discountRate} onChange={(event) => onChange("discountRate", event.target.value)} /></Field>
+            <Field label="Plafond credit"><Input type="number" step="0.01" value={form.creditLimit} onChange={(event) => onChange("creditLimit", event.target.value)} placeholder="Vide = sans plafond" /></Field>
           </div>
 
           <div className="grid gap-4 md:grid-cols-[1fr_180px]">
@@ -149,6 +162,34 @@ function saleTone(status: CustomerDetail["sales"][number]["status"]) {
   return "danger" as const;
 }
 
+const loyaltyReasonLabels: Record<string, string> = {
+  "Achat POS dÃƒÆ’Ã‚Â©mo": "Achat POS demo",
+  "Bonus fidÃƒÆ’Ã‚Â©litÃƒÆ’Ã‚Â©": "Bonus fidelite",
+  "Achat POS dÃ©mo": "Achat POS demo",
+  "Bonus fidÃ©litÃ©": "Bonus fidelite"
+};
+
+function formatLoyaltyReason(reason: string) {
+  const value = String(reason || "").trim();
+  if (!value) return "-";
+  if (loyaltyReasonLabels[value]) return loyaltyReasonLabels[value];
+  return value
+    .replaceAll("ÃƒÆ’Ã‚Â©", "e")
+    .replaceAll("ÃƒÆ’Ã‚Â¨", "e")
+    .replaceAll("ÃƒÆ’Ã‚Âª", "e")
+    .replaceAll("ÃƒÆ’Ã‚Â«", "e")
+    .replaceAll("ÃƒÆ’Ã‚Â ", "a")
+    .replaceAll("ÃƒÆ’Ã‚Â¢", "a")
+    .replaceAll("ÃƒÆ’Ã‚Â§", "c")
+    .replaceAll("Ã©", "e")
+    .replaceAll("Ã¨", "e")
+    .replaceAll("Ãª", "e")
+    .replaceAll("Ã«", "e")
+    .replaceAll("Ã ", "a")
+    .replaceAll("Ã¢", "a")
+    .replaceAll("Ã§", "c");
+}
+
 export function CustomerDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -177,6 +218,7 @@ export function CustomerDetailPage() {
       notes: customer.notes ?? "",
       loyaltyPoints: String(customer.loyaltyPoints),
       discountRate: String(customer.discountRate),
+      creditLimit: customer.creditLimit == null ? "" : String(customer.creditLimit),
       level: customer.level ?? "Standard"
     });
   }
@@ -210,7 +252,8 @@ export function CustomerDetailPage() {
       email: form.email || null,
       address: form.address || null,
       city: form.city || null,
-      notes: form.notes || null
+      notes: form.notes || null,
+      creditLimit: form.creditLimit.trim() ? Number(form.creditLimit) : null
     };
 
     try {
@@ -273,6 +316,18 @@ export function CustomerDetailPage() {
               <div className="rounded-[18px] border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.18em] text-[#bdaa98]">Encours</p><p className="mt-1 text-[13px] font-semibold text-white">{formatCurrency(Number(item.balanceDue))}</p></div>
               <div className="rounded-[18px] border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.18em] text-[#bdaa98]">Niveau</p><p className="mt-1 text-[13px] font-semibold text-white">{item.level}</p></div>
               <div className="rounded-[18px] border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.18em] text-[#bdaa98]">Fidelite</p><p className="mt-1 text-[13px] font-semibold text-white">{formatNumber(item.loyaltyPoints)} pts - {Number(item.discountRate)}%</p></div>
+              <div className={`rounded-[18px] border p-3 md:col-span-2 ${item.creditStatus?.isExceeded ? "border-rose-300/30 bg-rose-400/10" : "border-emerald-300/20 bg-emerald-400/10"}`}>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-[#bdaa98]">Etat credit client</p>
+                <div className="mt-2 grid gap-2 text-[13px] md:grid-cols-4">
+                  <div><span className="block text-[#b9aa9b]">Credit total</span><strong className="text-white">{formatCurrency(item.creditStatus?.creditAmount ?? 0)}</strong></div>
+                  <div><span className="block text-[#b9aa9b]">Rembourse</span><strong className="text-white">{formatCurrency(item.creditStatus?.repaidAmount ?? 0)}</strong></div>
+                  <div><span className="block text-[#b9aa9b]">Solde</span><strong className={item.creditStatus?.isExceeded ? "text-rose-100" : "text-white"}>{formatCurrency(item.creditStatus?.balanceAmount ?? 0)}</strong></div>
+                  <div><span className="block text-[#b9aa9b]">Plafond</span><strong className="text-white">{item.creditStatus?.isUnlimited ? "Sans plafond" : formatCurrency(item.creditStatus?.limitAmount ?? 0)}</strong></div>
+                </div>
+                {!item.creditStatus?.isUnlimited ? (
+                  <p className="mt-2 text-xs text-[#d9c9ba]">Disponible: {formatCurrency(item.creditStatus?.availableAmount ?? 0)}</p>
+                ) : null}
+              </div>
               <div className="rounded-[18px] border border-white/10 bg-black/20 p-3 md:col-span-2"><p className="text-[10px] uppercase tracking-[0.18em] text-[#bdaa98]">Adresse</p><p className="mt-1 text-[13px] font-semibold text-white">{item.address || "Aucune adresse"}</p></div>
               <div className="rounded-[18px] border border-white/10 bg-black/20 p-3 md:col-span-2"><p className="text-[10px] uppercase tracking-[0.18em] text-[#bdaa98]">Notes</p><p className="mt-1 text-[13px] leading-5 text-[#eadfd4]">{item.notes || "Aucune note."}</p></div>
             </div>
@@ -340,7 +395,7 @@ export function CustomerDetailPage() {
                       <tr key={entry.id}>
                         <td>{formatDate(entry.createdAt)}</td>
                         <td>{formatNumber(entry.points)}</td>
-                        <td>{entry.reason}</td>
+                        <td>{formatLoyaltyReason(entry.reason)}</td>
                       </tr>
                     ))}
                   </tbody>

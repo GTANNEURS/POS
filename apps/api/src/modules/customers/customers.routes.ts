@@ -14,8 +14,22 @@ const schema = z.object({
   notes: z.string().optional().nullable(),
   loyaltyPoints: z.coerce.number().int().default(0),
   discountRate: z.coerce.number().default(0),
+  creditLimit: z.coerce.number().nonnegative().optional().nullable(),
   level: z.string().default("Standard")
 });
+
+const CUSTOMER_CREDIT_REPAYMENTS_KEY = "pos_customer_credit_repayments";
+
+function parseRepaymentStore(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((entry) => ({
+        saleId: String((entry as { saleId?: unknown }).saleId ?? ""),
+        customerId: (entry as { customerId?: unknown }).customerId == null ? null : String((entry as { customerId?: unknown }).customerId),
+        amount: Number((entry as { amount?: unknown }).amount ?? 0),
+        deletedAt: (entry as { deletedAt?: unknown }).deletedAt == null ? null : String((entry as { deletedAt?: unknown }).deletedAt)
+      }))
+    : [];
+}
 
 export const customersRouter = Router();
 customersRouter.use(authenticate, requirePermissions("customers_manage"));
@@ -71,6 +85,18 @@ customersRouter.get("/:id", asyncHandler(async (req, res) => {
   const totalPaid = customer.sales.reduce((sum, sale) => sum + Number(sale.paidAmount), 0);
   const returnsCount = customer.returns.length;
   const totalReturns = customer.returns.reduce((sum, item) => sum + Number(item.amount), 0);
+  const creditSales = customer.sales.filter((sale) => sale.payments.some((payment) => payment.direction === "IN" && payment.method === "CREDIT"));
+  const creditAmount = creditSales.reduce((sum, sale) => (
+    sum + sale.payments
+      .filter((payment) => payment.direction === "IN" && payment.method === "CREDIT")
+      .reduce((paymentSum, payment) => paymentSum + Number(payment.amount), 0)
+  ), 0);
+  const repaymentSetting = await prisma.setting.findUnique({ where: { key: CUSTOMER_CREDIT_REPAYMENTS_KEY } });
+  const repayments = parseRepaymentStore(repaymentSetting?.value).filter((entry) => !entry.deletedAt && (entry.customerId === customer.id || creditSales.some((sale) => sale.id === entry.saleId)));
+  const creditRepaidAmount = repayments.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+  const creditBalance = Number(Math.max(0, creditAmount - creditRepaidAmount).toFixed(2));
+  const creditLimit = customer.creditLimit == null ? null : Number(customer.creditLimit);
+  const creditAvailable = creditLimit == null ? null : Number(Math.max(0, creditLimit - creditBalance).toFixed(2));
 
   return ok(res, {
     ...customer,
@@ -78,7 +104,16 @@ customersRouter.get("/:id", asyncHandler(async (req, res) => {
     totalSpent,
     totalPaid,
     returnsCount,
-    totalReturns
+    totalReturns,
+    creditStatus: {
+      creditAmount: Number(creditAmount.toFixed(2)),
+      repaidAmount: Number(creditRepaidAmount.toFixed(2)),
+      balanceAmount: creditBalance,
+      limitAmount: creditLimit,
+      availableAmount: creditAvailable,
+      isUnlimited: creditLimit == null,
+      isExceeded: creditLimit != null && creditBalance > creditLimit
+    }
   });
 }));
 
