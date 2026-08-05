@@ -223,6 +223,9 @@ html[data-theme="light"] {
   --gdt-orange: #ff8a1f;
   --gdt-orange-soft: #ffbd78;
   --gdt-line: rgba(74, 48, 30, 0.18);
+  --gdt-royal-blue: #1f4ed8;
+  --gdt-royal-blue-deep: #173484;
+  --gdt-royal-blue-soft: rgba(31, 78, 216, 0.12);
 }
 
 html[data-theme="light"] body {
@@ -425,6 +428,90 @@ html[data-theme="light"] .border-orange-300\/40 {
 html[data-theme="light"] .bg-orange-300\/10,
 html[data-theme="light"] .bg-orange-300\/15 {
   background-color: rgba(255, 138, 31, 0.13) !important;
+}
+
+html[data-theme="light"] .product-variant-builder,
+html[data-theme="light"] .product-variant-detail {
+  border-color: rgba(31, 78, 216, 0.18) !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(31, 78, 216, 0.10), transparent 32%),
+    linear-gradient(145deg, rgba(255, 250, 242, 0.96), rgba(232, 215, 191, 0.82)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 18px 44px rgba(74, 48, 30, 0.10);
+}
+
+html[data-theme="light"] .product-variant-kicker,
+html[data-theme="light"] .product-variant-title {
+  color: var(--gdt-royal-blue-deep) !important;
+}
+
+html[data-theme="light"] .product-variant-picker,
+html[data-theme="light"] .product-variant-recap,
+html[data-theme="light"] .product-variant-group,
+html[data-theme="light"] .product-variant-row,
+html[data-theme="light"] .product-variant-card,
+html[data-theme="light"] .product-variant-location {
+  border-color: rgba(75, 50, 31, 0.16) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.88), rgba(242, 229, 211, 0.82)) !important;
+  color: var(--gdt-leather-dark) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+html[data-theme="light"] .product-variant-location-active {
+  border-color: rgba(31, 78, 216, 0.30) !important;
+  background:
+    linear-gradient(135deg, rgba(31, 78, 216, 0.13), rgba(255, 184, 107, 0.24)),
+    linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(238, 221, 200, 0.86)) !important;
+  box-shadow:
+    0 14px 28px rgba(31, 78, 216, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+html[data-theme="light"] .product-variant-summary {
+  color: var(--gdt-brown) !important;
+}
+
+html[data-theme="light"] .product-variant-picker label:hover,
+html[data-theme="light"] .product-variant-row:hover,
+html[data-theme="light"] .product-variant-card:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 245, 231, 0.98), rgba(239, 219, 195, 0.92)) !important;
+  box-shadow:
+    0 12px 26px rgba(31, 78, 216, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+html[data-theme="light"] .product-variant-grid-head,
+html[data-theme="light"] .product-variant-table thead {
+  border-color: rgba(31, 78, 216, 0.18) !important;
+  background:
+    linear-gradient(90deg, rgba(31, 78, 216, 0.14), rgba(138, 85, 43, 0.08)) !important;
+  color: var(--gdt-royal-blue-deep) !important;
+}
+
+html[data-theme="light"] .product-variant-group-head {
+  border-color: rgba(31, 78, 216, 0.13) !important;
+}
+
+html[data-theme="light"] .product-variant-builder .input-base,
+html[data-theme="light"] .product-variant-builder .select-base {
+  border-color: rgba(31, 78, 216, 0.18) !important;
+  background-color: rgba(255, 252, 247, 0.98) !important;
+  color: var(--gdt-leather-dark) !important;
+}
+
+html[data-theme="light"] .product-variant-builder .input-base:focus,
+html[data-theme="light"] .product-variant-builder .select-base:focus {
+  border-color: rgba(31, 78, 216, 0.52) !important;
+  box-shadow:
+    0 0 0 3px rgba(31, 78, 216, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.60) !important;
+}
+
+html[data-theme="light"] .product-variant-table tbody tr:hover {
+  background-color: rgba(31, 78, 216, 0.06) !important;
 }
 
 html[data-theme="light"] .from-orange-300\/20,

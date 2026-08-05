@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent,
 import { Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
-import { formatCurrency, formatNumber } from "../../lib/format";
+import { cleanDisplayText, formatCurrency, formatNumber } from "../../lib/format";
 import { Badge, Button, EmptyState, Field, Input, LoadingBlock, PageHeader, SectionCard, Select, Textarea } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
@@ -597,7 +597,7 @@ function ProductModal({
                     <Field label="Unite">
                       <Select value={form.unitId} onChange={(event) => onChange("unitId", event.target.value)}>
                         <option value="">Choisir</option>
-                        {meta?.units.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                        {meta?.units.map((item) => <option key={item.id} value={item.id}>{cleanDisplayText(item.name)}</option>)}
                       </Select>
                     </Field>
                     <Field label="Dimension">
@@ -633,10 +633,10 @@ function ProductModal({
               ) : null}
 
               {activeTab === "variants" ? (
-                <div className="space-y-4 rounded-[22px] border border-white/10 bg-black/18 p-4">
+                <div className="product-variant-builder space-y-4 rounded-[22px] border border-white/10 bg-black/18 p-4">
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                     <div className="space-y-1.5">
-                      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-200/80">Couleurs</div>
+                      <div className="product-variant-kicker text-xs font-semibold uppercase tracking-[0.22em] text-orange-200/80">Couleurs</div>
                       <Select value={selectedColorType} onChange={(event) => {
                         const nextType = event.target.value;
                         setSelectedColorType(nextType);
@@ -645,8 +645,8 @@ function ProductModal({
                         <option value="">Tous les types</option>
                         {colorTypes.map((type) => <option key={type} value={type}>{type}</option>)}
                       </Select>
-                      <details className="group rounded-[18px] border border-white/10 bg-black/28">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-white">
+                       <details className="product-variant-picker group rounded-[18px] border border-white/10 bg-black/28">
+                        <summary className="product-variant-summary flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-white">
                           <span className="min-w-0 truncate">{selectedColorLabel}</span>
                           <span className="shrink-0 rounded-full border border-orange-300/20 bg-orange-300/10 px-2 py-0.5 text-[11px] text-orange-100">{selectedColors.length}</span>
                         </summary>
@@ -666,7 +666,7 @@ function ProductModal({
                     </div>
 
                     <div className="space-y-1.5">
-                      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-200/80">Tailles</div>
+                      <div className="product-variant-kicker text-xs font-semibold uppercase tracking-[0.22em] text-orange-200/80">Tailles</div>
                       <Select value={selectedSizeType} onChange={(event) => {
                         const nextType = event.target.value;
                         setSelectedSizeType(nextType);
@@ -675,8 +675,8 @@ function ProductModal({
                         <option value="">Tous les types</option>
                         {sizeTypes.map((type) => <option key={type} value={type}>{type}</option>)}
                       </Select>
-                      <details className="group rounded-[18px] border border-white/10 bg-black/28">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-white">
+                      <details className="product-variant-picker group rounded-[18px] border border-white/10 bg-black/28">
+                        <summary className="product-variant-summary flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-white">
                           <span className="min-w-0 truncate">{selectedSizeLabel}</span>
                           <span className="shrink-0 rounded-full border border-orange-300/20 bg-orange-300/10 px-2 py-0.5 text-[11px] text-orange-100">{selectedSizes.length}</span>
                         </summary>
@@ -696,7 +696,7 @@ function ProductModal({
                     </div>
                     </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-white/10 bg-white/[0.03] p-3 text-xs text-[#baa999]">
+                  <div className="product-variant-recap flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-white/10 bg-white/[0.03] p-3 text-xs text-[#baa999]">
                     <div className="flex flex-wrap gap-4">
                       <div>Couleurs selectionnees: <span className="text-white">{selectedColors.length}</span></div>
                       <div>Tailles selectionnees: <span className="text-white">{selectedSizes.length}</span></div>
@@ -712,9 +712,9 @@ function ProductModal({
               ) : null}
 
                             {activeTab === "declinaisons" ? (
-                <div className="rounded-[22px] border border-white/10 bg-black/18 p-4">
+                <div className="product-variant-builder rounded-[22px] border border-white/10 bg-black/18 p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-white">Declinaisons</div>
+                    <div className="product-variant-title text-sm font-semibold text-white">Declinaisons</div>
                     <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-[#eadfd4]">{formatNumber(form.variants.length)} variante(s)</div>
                   </div>
 
@@ -723,14 +723,14 @@ function ProductModal({
                   ) : (
                     <div className="space-y-3">
                       {groupedVariants.map((group) => (
-                        <div key={group.color} className="rounded-[16px] border border-white/10 bg-white/[0.03] p-3">
-                          <div className="mb-2 flex items-center justify-between gap-3 border-b border-white/8 pb-2">
-                            <div className="text-sm font-semibold text-white">{group.color}</div>
+                         <div key={group.color} className="product-variant-group rounded-[16px] border border-white/10 bg-white/[0.03] p-3">
+                            <div className="product-variant-group-head mb-2 flex items-center justify-between gap-3 border-b border-white/8 pb-2">
+                              <div className="product-variant-title text-sm font-semibold text-white">{group.color}</div>
                             <div className="rounded-full border border-orange-300/20 bg-orange-300/10 px-2.5 py-1 text-[11px] text-orange-100">{formatNumber(group.items.length)} variante(s)</div>
                           </div>
 
                           <div className="space-y-1.5">
-                            <div className="hidden xl:grid xl:grid-cols-[96px_72px_minmax(0,1.1fr)_88px_40px] xl:gap-2 xl:rounded-[12px] xl:border xl:border-white/8 xl:bg-white/[0.03] xl:px-3 xl:py-2 xl:text-[10px] xl:font-medium xl:uppercase xl:tracking-[0.16em] xl:text-[#bfae9f]">
+                            <div className="product-variant-grid-head hidden xl:grid xl:grid-cols-[96px_72px_minmax(0,1.1fr)_88px_40px] xl:gap-2 xl:rounded-[12px] xl:border xl:border-white/8 xl:bg-white/[0.03] xl:px-3 xl:py-2 xl:text-[10px] xl:font-medium xl:uppercase xl:tracking-[0.16em] xl:text-[#bfae9f]">
                               <div>Taille</div>
                               <div>Stock</div>
                               <div>Code-barres variante</div>
@@ -739,7 +739,7 @@ function ProductModal({
                             </div>
 
                             {group.items.map(({ variant, index }) => (
-                              <div key={`${variant.reference}-${index}`} className="rounded-[12px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.025),rgba(255,255,255,0.012))] px-3 py-2">
+                              <div key={`${variant.reference}-${index}`} className="product-variant-row rounded-[12px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.025),rgba(255,255,255,0.012))] px-3 py-2">
                                 <div className="mb-1.5 flex items-center justify-between gap-3 xl:hidden">
                                   <div className="min-w-0">
                                     <div className="truncate text-[13px] font-semibold text-white">{buildVariantLabel(form.name || "Article", variant.color, variant.size) || `Variante ${index + 1}`}</div>

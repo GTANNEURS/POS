@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, LoadingBlock, PageHeader, SectionCard, Select } from "../../components/ui/primitives";
 import { api } from "../../lib/api";
 import { buildCode39Svg, canEncodeCode39, normalizeCode39Value } from "../../lib/code39";
-import { formatCurrency, formatDateTime, formatNumber } from "../../lib/format";
+import { cleanDisplayText, formatCurrency, formatDateTime, formatNumber } from "../../lib/format";
 import { useAuth } from "../../providers/AuthProvider";
 
 type StockMovement = {
@@ -449,7 +449,7 @@ export function ProductDetailPage() {
             </div>
             <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
               <p className="text-xs uppercase tracking-[0.22em] text-[#bdaa98]">{scopedWarehouseName ? `Stock ${scopedWarehouseName}` : "Stock global"}</p>
-              <p className={item.stockOnHand < 0 ? "mt-2 text-base font-semibold text-rose-200" : "mt-2 text-base font-semibold text-white"}>{formatNumber(item.stockOnHand)} {item.unit?.name ?? "unites"}</p>
+              <p className={item.stockOnHand < 0 ? "mt-2 text-base font-semibold text-rose-200" : "mt-2 text-base font-semibold text-white"}>{formatNumber(item.stockOnHand)} {cleanDisplayText(item.unit?.name) || "unites"}</p>
               <p className="mt-1 text-xs text-[#b9aa9b]">Minimum {formatNumber(item.minStock)}</p>
             </div>
             <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
@@ -524,8 +524,8 @@ export function ProductDetailPage() {
                       type="button"
                       onClick={() => setSelectedVariantWarehouseId(location.warehouseId)}
                       className={isActive
-                        ? "rounded-[22px] border border-orange-300/35 bg-orange-300/12 px-4 py-3 text-left"
-                        : "rounded-[22px] border border-white/10 bg-black/20 px-4 py-3 text-left transition hover:border-white/20 hover:bg-black/25"}
+                        ? "product-variant-location product-variant-location-active rounded-[22px] border border-orange-300/35 bg-orange-300/12 px-4 py-3 text-left"
+                        : "product-variant-location rounded-[22px] border border-white/10 bg-black/20 px-4 py-3 text-left transition hover:border-white/20 hover:bg-black/25"}
                     >
                       <div className="text-sm font-semibold text-white">{location.warehouseName || "Boutique"}</div>
                       <div className="mt-1 text-xs text-[#b9aa9b]">
@@ -543,11 +543,11 @@ export function ProductDetailPage() {
               </div>
 
               {activeVariantWarehouse ? (
-                <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                <div className="product-variant-detail rounded-[24px] border border-white/10 bg-black/20 p-4">
                   <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300/75">Disponibilite variantes</p>
-                      <h3 className="mt-1 text-base font-semibold text-white">{activeVariantWarehouse.warehouseName || "Boutique"}</h3>
+                      <p className="product-variant-kicker text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300/75">Disponibilite variantes</p>
+                      <h3 className="product-variant-title mt-1 text-base font-semibold text-white">{activeVariantWarehouse.warehouseName || "Boutique"}</h3>
                     </div>
                     <div className={selectedWarehouseVariantTotal < 0
                       ? "rounded-[18px] border border-rose-300/30 bg-rose-400/10 px-4 py-2 text-right"
@@ -559,7 +559,7 @@ export function ProductDetailPage() {
                   </div>
 
                   <div className="overflow-auto rounded-[20px] border border-white/10">
-                    <table className="w-full min-w-[620px] text-left text-sm">
+                    <table className="product-variant-table w-full min-w-[620px] text-left text-sm">
                       <thead className="bg-white/5 text-xs uppercase tracking-[0.18em] text-[#d9c5b1]">
                         <tr>
                           <th className="px-4 py-3">Couleur</th>
@@ -609,7 +609,7 @@ export function ProductDetailPage() {
                     {item.variants.map((variant) => {
                       const locationQuantity = variant.locationBalances.find((location) => location.warehouseId === activeVariantWarehouseId)?.quantity ?? 0;
                       return (
-                        <div key={variant.id} className="rounded-[20px] border border-white/10 bg-[#120e0c] px-4 py-3">
+                        <div key={variant.id} className="product-variant-card rounded-[20px] border border-white/10 bg-[#120e0c] px-4 py-3">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-white">{variant.label}</p>
