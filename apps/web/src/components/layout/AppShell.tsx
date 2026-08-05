@@ -25,7 +25,7 @@ import {
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { cn } from "../../lib/format";
-import { rememberOpenCashSession } from "../../lib/offline";
+import { isNetworkError, readCachedOpenCashSession, readPosSnapshot, rememberOpenCashSession } from "../../lib/offline";
 import { useAuth } from "../../providers/AuthProvider";
 import { Button, EmptyState, Input, LoadingBlock } from "../ui/primitives";
 
@@ -225,6 +225,14 @@ type CurrencyOption = {
   code: string;
   rateFromMad: number;
   isActive: boolean;
+};
+
+type CachedPosSnapshot = {
+  bootstrap?: {
+    registers?: CashRegisterOption[];
+    currencies?: CurrencyOption[];
+    company?: PosCompanyInfo;
+  };
 };
 
 type InventoryTransferNotification = {
@@ -777,6 +785,45 @@ export function AppShell() {
   );
   const canManageCash = Boolean(user?.permissions.includes("cash_manage"));
 
+  function getCachedCashSessionSetup() {
+    const cached = readPosSnapshot<CachedPosSnapshot>();
+    const bootstrap = cached?.bootstrap;
+    const registers = (bootstrap?.registers ?? []).filter((register) => !user?.defaultWarehouse?.id || register.warehouseId === user.defaultWarehouse.id);
+    const currencies = (bootstrap?.currencies ?? []).filter((currency) => currency.isActive !== false);
+    return {
+      registers,
+      currencies,
+      company: bootstrap?.company ?? null
+    };
+  }
+
+  function buildSessionFromCachedOpenSession(cachedSession: NonNullable<ReturnType<typeof readCachedOpenCashSession>>): CurrentCashSession {
+    const register = cashSessionRegisters.find((item) => item.id === cachedSession.registerId);
+    return {
+      id: cachedSession.id || `offline-cash-${cachedSession.registerId}-${cachedSession.openedAt}`,
+      openingAmount: Number(cachedSession.openingAmount ?? 0),
+      status: "OPEN",
+      openedAt: cachedSession.openedAt,
+      openingBreakdown: cachedSession.openingBreakdown ?? [],
+      register: {
+        id: cachedSession.registerId,
+        name: cachedSession.registerName || register?.name || "Caisse",
+        warehouseId: cachedSession.warehouseId,
+        warehouseName: cachedSession.warehouseName || user?.defaultWarehouse?.name || "Boutique"
+      }
+    };
+  }
+
+  function syncCachedOpenCashSession() {
+    const cachedSession = readCachedOpenCashSession({
+      warehouseId: user?.defaultWarehouse?.id || undefined,
+      date: todayIso
+    });
+    if (!cachedSession) return false;
+    syncCurrentCashSession(buildSessionFromCachedOpenSession(cachedSession));
+    return true;
+  }
+
   function syncCurrentCashSession(session: CurrentCashSession) {
     setCurrentCashSession(session);
     const openingMad = session?.openingBreakdown.find((entry) => entry.currencyCode === "MAD")?.amount ?? session?.openingAmount ?? 0;
@@ -807,9 +854,14 @@ export function AppShell() {
 
     setCashierSessionReminder(null);
     rememberOpenCashSession({
+      id: session.id,
       registerId: session.register.id,
+      registerName: session.register.name,
       warehouseId: session.register.warehouseId,
-      openedAt: session.openedAt
+      warehouseName: session.register.warehouseName,
+      openedAt: session.openedAt,
+      openingAmount: session.openingAmount,
+      openingBreakdown: session.openingBreakdown
     });
   }
 
@@ -820,10 +872,20 @@ export function AppShell() {
       return;
     }
 
-    const session = await api<CurrentCashSession>(`/pos/sessions/current${user?.defaultWarehouse?.id ? `?warehouseId=${encodeURIComponent(user.defaultWarehouse.id)}` : ""}`);
-    syncCurrentCashSession(session);
-    if (!session && options?.includeSetup) {
-      await loadCashSessionSetup();
+    try {
+      const session = await api<CurrentCashSession>(`/pos/sessions/current${user?.defaultWarehouse?.id ? `?warehouseId=${encodeURIComponent(user.defaultWarehouse.id)}` : ""}`);
+      syncCurrentCashSession(session);
+      if (!session && options?.includeSetup) {
+        await loadCashSessionSetup();
+      }
+    } catch (error) {
+      if (!isNetworkError(error)) throw error;
+      if (!syncCachedOpenCashSession()) {
+        syncCurrentCashSession(null);
+        if (options?.includeSetup) {
+          await loadCashSessionSetup();
+        }
+      }
     }
   }
 
@@ -1062,8 +1124,20 @@ export function AppShell() {
     }
     setCashierSessionLoading(true);
     try {
-      const session = await api<CurrentCashSession>(`/pos/sessions/current${user?.defaultWarehouse?.id ? `?warehouseId=${encodeURIComponent(user.defaultWarehouse.id)}` : ""}`);
-      syncCurrentCashSession(session);
+      let session: CurrentCashSession = null;
+      try {
+        session = await api<CurrentCashSession>(`/pos/sessions/current${user?.defaultWarehouse?.id ? `?warehouseId=${encodeURIComponent(user.defaultWarehouse.id)}` : ""}`);
+        syncCurrentCashSession(session);
+      } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const cachedSession = readCachedOpenCashSession({
+          warehouseId: user?.defaultWarehouse?.id || undefined,
+          date: todayIso
+        });
+        session = cachedSession ? buildSessionFromCachedOpenSession(cachedSession) : null;
+        syncCurrentCashSession(session);
+        setCashierSessionMessage("Mode hors ligne: session caisse lue depuis cet ordinateur.");
+      }
       if (!session) {
         await loadCashSessionSetup();
       }
@@ -1088,12 +1162,28 @@ export function AppShell() {
   }
 
   async function loadCashSessionSetup() {
-    const bootstrap = await api<{ registers: CashRegisterOption[]; currencies: CurrencyOption[]; company?: PosCompanyInfo }>("/pos/bootstrap");
-    const filteredRegisters = (bootstrap.registers ?? []).filter((register) => !user?.defaultWarehouse?.id || register.warehouseId === user.defaultWarehouse.id);
-    setCashSessionRegisters(filteredRegisters);
-    setCashSessionCurrencies((bootstrap.currencies ?? []).filter((currency) => currency.isActive !== false));
-    setPosCompany(bootstrap.company ?? null);
-    setCashOpeningRegisterId((current) => current || filteredRegisters[0]?.id || "");
+    try {
+      const bootstrap = await api<{ registers: CashRegisterOption[]; currencies: CurrencyOption[]; company?: PosCompanyInfo }>("/pos/bootstrap");
+      const filteredRegisters = (bootstrap.registers ?? []).filter((register) => !user?.defaultWarehouse?.id || register.warehouseId === user.defaultWarehouse.id);
+      setCashSessionRegisters(filteredRegisters);
+      setCashSessionCurrencies((bootstrap.currencies ?? []).filter((currency) => currency.isActive !== false));
+      setPosCompany(bootstrap.company ?? null);
+      setCashOpeningRegisterId((current) => current || filteredRegisters[0]?.id || "");
+    } catch (error) {
+      if (!isNetworkError(error)) throw error;
+      const cached = getCachedCashSessionSetup();
+      setCashSessionRegisters(cached.registers);
+      setCashSessionCurrencies(cached.currencies.length ? cached.currencies : [
+        { id: "MAD", code: "MAD", rateFromMad: 1, isActive: true },
+        { id: "EUR", code: "EUR", rateFromMad: 0.09206, isActive: true },
+        { id: "USD", code: "USD", rateFromMad: 0.1, isActive: true }
+      ]);
+      setPosCompany(cached.company);
+      setCashOpeningRegisterId((current) => current || cached.registers[0]?.id || "");
+      setCashierSessionMessage(cached.registers.length
+        ? "Mode hors ligne: caisses chargees depuis cet ordinateur."
+        : "Mode hors ligne: ouvre une fois le POS avec internet pour memoriser les caisses.");
+    }
   }
 
   function getOpeningBreakdownAmount(currencyCode: "MAD" | "EUR") {
@@ -1256,6 +1346,12 @@ export function AppShell() {
       return;
     }
 
+    const openingBreakdown = [
+      { currencyCode: "MAD", amount: madAmount, amountMad: madAmount, rateFromMad: 1 },
+      { currencyCode: "EUR", amount: eurAmount, amountMad: Number(convertForeignToMad(eurAmount, eurRate).toFixed(2)), rateFromMad: Number(eurRate ?? 0) },
+      { currencyCode: "USD", amount: usdAmount, amountMad: Number(convertForeignToMad(usdAmount, usdRate).toFixed(2)), rateFromMad: Number(usdRate ?? 0) }
+    ].filter((entry) => entry.amount > 0);
+
     setCashSessionActionLoading("open");
     try {
       await api("/pos/sessions/open", {
@@ -1263,11 +1359,7 @@ export function AppShell() {
         body: JSON.stringify({
           registerId: cashOpeningRegisterId,
           openingAmount: Number(openingAmount.toFixed(2)),
-          openingBreakdown: [
-            { currencyCode: "MAD", amount: madAmount, amountMad: madAmount, rateFromMad: 1 },
-            { currencyCode: "EUR", amount: eurAmount, amountMad: Number(convertForeignToMad(eurAmount, eurRate).toFixed(2)), rateFromMad: Number(eurRate ?? 0) },
-            { currencyCode: "USD", amount: usdAmount, amountMad: Number(convertForeignToMad(usdAmount, usdRate).toFixed(2)), rateFromMad: Number(usdRate ?? 0) }
-          ].filter((entry) => entry.amount > 0)
+          openingBreakdown
         })
       });
       await refreshCashierSessionState();
@@ -1276,6 +1368,33 @@ export function AppShell() {
       setCashierSessionStep("actions");
       setCashierSessionMenuOpen(false);
     } catch (error) {
+      if (isNetworkError(error)) {
+        const register = cashSessionRegisters.find((item) => item.id === cashOpeningRegisterId);
+        if (!register) {
+          setCashierSessionMessage("Mode hors ligne: caisse introuvable dans le cache de cet ordinateur.");
+          return;
+        }
+        const openedAt = new Date().toISOString();
+        const localSession: CurrentCashSession = {
+          id: `offline-cash-${cashOpeningRegisterId}-${Date.now()}`,
+          openingAmount: Number(openingAmount.toFixed(2)),
+          status: "OPEN",
+          openedAt,
+          openingBreakdown,
+          register: {
+            id: register.id,
+            name: register.name,
+            warehouseId: register.warehouseId,
+            warehouseName: user?.defaultWarehouse?.name || "Boutique"
+          }
+        };
+        syncCurrentCashSession(localSession);
+        setCashierSessionReminder(null);
+        setCashierSessionMessage(null);
+        setCashierSessionStep("actions");
+        setCashierSessionMenuOpen(false);
+        return;
+      }
       setCashierSessionMessage(error instanceof Error ? error.message : "Ouverture de caisse impossible.");
     } finally {
       setCashSessionActionLoading("");

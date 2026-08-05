@@ -30,10 +30,20 @@ type CachedUser = {
   defaultWarehouse: { id: string; name: string; code: string; type: string } | null;
 };
 type CachedCashSession = {
+  id?: string;
   registerId: string;
+  registerName?: string;
   warehouseId: string;
+  warehouseName?: string;
   date: string;
   openedAt: string;
+  openingAmount?: number;
+  openingBreakdown?: Array<{
+    currencyCode: string;
+    amount: number;
+    amountMad: number;
+    rateFromMad: number;
+  }>;
   cachedAt: string;
 };
 type CachedCashier = {
@@ -137,15 +147,29 @@ function writeCashSessionCache(items: CachedCashSession[]) {
   localStorage.setItem(OFFLINE_CASH_SESSION_KEY, JSON.stringify(items));
 }
 
-export function rememberOpenCashSession(input: { registerId: string; warehouseId: string; openedAt?: string }) {
+export function rememberOpenCashSession(input: {
+  id?: string;
+  registerId: string;
+  registerName?: string;
+  warehouseId: string;
+  warehouseName?: string;
+  openedAt?: string;
+  openingAmount?: number;
+  openingBreakdown?: CachedCashSession["openingBreakdown"];
+}) {
   if (!input.registerId || !input.warehouseId) return;
   const openedAt = input.openedAt || new Date().toISOString();
   const date = new Date(openedAt).toLocaleDateString("en-CA");
   const nextSession: CachedCashSession = {
+    id: input.id,
     registerId: input.registerId,
+    registerName: input.registerName,
     warehouseId: input.warehouseId,
+    warehouseName: input.warehouseName,
     date,
     openedAt,
+    openingAmount: input.openingAmount,
+    openingBreakdown: input.openingBreakdown,
     cachedAt: new Date().toISOString()
   };
   const others = readCashSessionCache().filter((item) => !(item.registerId === input.registerId && item.warehouseId === input.warehouseId));
@@ -155,6 +179,15 @@ export function rememberOpenCashSession(input: { registerId: string; warehouseId
 export function hasCachedOpenCashSession(input: { registerId: string; warehouseId: string; date?: string }) {
   const date = input.date || new Date().toLocaleDateString("en-CA");
   return readCashSessionCache().some((item) => item.registerId === input.registerId && item.warehouseId === input.warehouseId && item.date === date);
+}
+
+export function readCachedOpenCashSession(input: { registerId?: string; warehouseId?: string; date?: string }) {
+  const date = input.date || new Date().toLocaleDateString("en-CA");
+  return readCashSessionCache().find((item) => (
+    (!input.registerId || item.registerId === input.registerId)
+    && (!input.warehouseId || item.warehouseId === input.warehouseId)
+    && item.date === date
+  )) ?? null;
 }
 
 export function isNetworkError(error: unknown) {
