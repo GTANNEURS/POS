@@ -514,6 +514,88 @@ html[data-theme="light"] .product-variant-table tbody tr:hover {
   background-color: rgba(31, 78, 216, 0.06) !important;
 }
 
+html[data-theme="light"] .stock-variant-expanded-row {
+  background:
+    linear-gradient(180deg, rgba(31, 78, 216, 0.045), rgba(138, 85, 43, 0.055)) !important;
+}
+
+html[data-theme="light"] .stock-variant-detail {
+  border-color: rgba(31, 78, 216, 0.20) !important;
+  background:
+    radial-gradient(circle at 96% 8%, rgba(31, 78, 216, 0.12), transparent 34%),
+    linear-gradient(145deg, rgba(255, 251, 244, 0.98), rgba(232, 215, 191, 0.88)) !important;
+  color: var(--gdt-leather-dark) !important;
+  box-shadow:
+    0 18px 42px rgba(74, 48, 30, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+html[data-theme="light"] .stock-variant-kicker {
+  color: var(--gdt-royal-blue-deep) !important;
+}
+
+html[data-theme="light"] .stock-variant-title {
+  color: #24160d !important;
+}
+
+html[data-theme="light"] .stock-variant-subtitle {
+  color: var(--gdt-taupe) !important;
+}
+
+html[data-theme="light"] .stock-variant-close {
+  border-color: rgba(31, 78, 216, 0.22) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 246, 0.96), rgba(229, 211, 188, 0.86)) !important;
+  color: var(--gdt-royal-blue-deep) !important;
+  box-shadow: 0 8px 18px rgba(31, 78, 216, 0.08);
+}
+
+html[data-theme="light"] .stock-variant-close:hover {
+  border-color: rgba(31, 78, 216, 0.42) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 245, 232, 0.98), rgba(255, 184, 107, 0.34)) !important;
+  color: #172c72 !important;
+}
+
+html[data-theme="light"] .stock-variant-table-wrap,
+html[data-theme="light"] .stock-variant-empty {
+  border-color: rgba(75, 50, 31, 0.16) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.88), rgba(242, 229, 211, 0.82)) !important;
+  color: var(--gdt-leather-dark) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+html[data-theme="light"] .stock-variant-table thead {
+  background:
+    linear-gradient(90deg, rgba(31, 78, 216, 0.16), rgba(138, 85, 43, 0.08)) !important;
+  color: var(--gdt-royal-blue-deep) !important;
+}
+
+html[data-theme="light"] .stock-variant-table tbody {
+  color: var(--gdt-leather-dark) !important;
+}
+
+html[data-theme="light"] .stock-variant-table tbody tr {
+  border-color: rgba(75, 50, 31, 0.13) !important;
+}
+
+html[data-theme="light"] .stock-variant-table tbody tr:hover {
+  background-color: rgba(31, 78, 216, 0.06) !important;
+}
+
+html[data-theme="light"] .stock-variant-table td {
+  color: var(--gdt-leather-dark) !important;
+}
+
+html[data-theme="light"] .stock-variant-qty {
+  color: #22150d !important;
+}
+
+html[data-theme="light"] .stock-variant-qty-muted {
+  color: #927f6a !important;
+}
+
 html[data-theme="light"] .from-orange-300\/20,
 html[data-theme="light"] .via-orange-400\/10 {
   --tw-gradient-from: rgba(255, 138, 31, 0.20) var(--tw-gradient-from-position) !important;

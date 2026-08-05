@@ -606,18 +606,18 @@ export function InventoryPage() {
                               })}
                             </tr>
                             {isExpanded && expandedWarehouse ? (
-                              <tr className="bg-black/10">
+                              <tr className="stock-variant-expanded-row bg-black/10">
                                 <td colSpan={2 + orderedWarehouses.length} className="px-4 py-4">
-                                  <div className="rounded-[24px] border border-white/10 bg-[#120e0c] p-4">
+                                  <div className="stock-variant-detail rounded-[24px] border border-white/10 bg-[#120e0c] p-4">
                                     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                                       <div>
-                                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300/75">Detail variantes</p>
-                                        <h3 className="mt-1 text-base font-semibold text-white">{item.name}</h3>
-                                        <p className="mt-1 text-sm text-[#cdbfb1]">{expandedWarehouse.name}</p>
+                                        <p className="stock-variant-kicker text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300/75">Detail variantes</p>
+                                        <h3 className="stock-variant-title mt-1 text-base font-semibold text-white">{item.name}</h3>
+                                        <p className="stock-variant-subtitle mt-1 text-sm text-[#cdbfb1]">{expandedWarehouse.name}</p>
                                       </div>
                                       <button
                                         type="button"
-                                        className="rounded-full border border-white/12 bg-white/5 px-3 py-1.5 text-xs font-medium text-[#e7d8c8] transition hover:border-white/20 hover:text-white"
+                                        className="stock-variant-close rounded-full border border-white/12 bg-white/5 px-3 py-1.5 text-xs font-medium text-[#e7d8c8] transition hover:border-white/20 hover:text-white"
                                         onClick={() => openVariantMatrix(item.id, expandedWarehouse.id)}
                                       >
                                         Fermer
@@ -625,8 +625,8 @@ export function InventoryPage() {
                                     </div>
 
                                     {item.variants.length ? (
-                                      <div className="overflow-auto rounded-[20px] border border-white/10">
-                                        <table className="w-full min-w-[520px] text-left text-sm">
+                                      <div className="stock-variant-table-wrap overflow-auto rounded-[20px] border border-white/10">
+                                        <table className="stock-variant-table w-full min-w-[520px] text-left text-sm">
                                           <thead className="bg-white/5 text-xs uppercase tracking-[0.18em] text-[#d9c5b1]">
                                             <tr>
                                               <th className="px-4 py-3">Couleur</th>
@@ -655,17 +655,17 @@ export function InventoryPage() {
                                                   const quantity = getVariantQuantityForCell(color.name, size);
                                                   return (
                                                     <td key={`${color.name}-${size}`} className="px-4 py-3 text-center">
-                                                      <span className={quantity > 0 ? "font-semibold text-white" : "text-[#7d6f63]"}>{formatNumber(quantity)}</span>
-                                                    </td>
-                                                  );
-                                                })}
+                                                  <span className={quantity > 0 ? "stock-variant-qty font-semibold text-white" : "stock-variant-qty-muted text-[#7d6f63]"}>{formatNumber(quantity)}</span>
+                                                </td>
+                                              );
+                                            })}
                                               </tr>
                                             ))}
                                           </tbody>
                                         </table>
                                       </div>
                                     ) : (
-                                      <div className="rounded-[20px] border border-white/10 bg-black/20 px-4 py-4 text-sm text-[#d8cabc]">
+                                      <div className="stock-variant-empty rounded-[20px] border border-white/10 bg-black/20 px-4 py-4 text-sm text-[#d8cabc]">
                                         Cet article n&apos;a pas de variantes. Stock direct disponible dans cette boutique : {formatNumber(
                                           item.locations.find((location) => location.warehouseId === expandedWarehouse.id)?.quantity ?? 0
                                         )}
