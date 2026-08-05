@@ -3149,7 +3149,7 @@ export function PosPage() {
           <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight" type="button" variant="secondary" onClick={openShippingModal}>Frais de port</Button>
           <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight" type="button" variant="secondary" onClick={requestTicketDiscountApproval}>Remise ticket</Button>
           <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight" type="button" onClick={() => setOrderModalOpen(true)}>Ajouter une commande</Button>
-          <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight" type="button" onClick={openCreditNoteModal}>Bon d'avoir</Button>
+          <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight" type="button" variant="secondary" onClick={openCreditNoteModal}>Bon d'avoir</Button>
           <Button className="h-[44px] w-full !rounded-[16px] !justify-center !px-2.5 !py-0 text-center text-[11px] font-semibold leading-tight sm:col-span-2" type="button" variant="secondary" onClick={openDeliveryOrderModal}>Livraison Commande</Button>
         </div>
         <div className="w-full space-y-1.5 rounded-[16px] border border-white/10 bg-black/25 p-2.5 text-xs text-[#eadfd4] xl:ml-auto xl:max-w-[300px]">
@@ -3167,7 +3167,7 @@ export function PosPage() {
       {message ? (
         <div className="pointer-events-none fixed right-4 top-4 z-[80] flex w-[min(92vw,420px)] justify-end">
           <div
-            className={`pointer-events-auto flex w-full items-start gap-3 rounded-[22px] border px-4 py-3 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-md ${
+            className={`pos-floating-message pos-floating-message-${messageTone} pointer-events-auto flex w-full items-start gap-3 rounded-[22px] border px-4 py-3 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur-md ${
               messageTone === "success"
                 ? "border-emerald-300/25 bg-emerald-500/12 text-emerald-50"
                 : messageTone === "error"
@@ -3175,7 +3175,7 @@ export function PosPage() {
                   : "border-sky-300/25 bg-sky-500/12 text-sky-50"
             }`}
           >
-            <div className="mt-0.5 shrink-0">
+            <div className="pos-floating-message-icon mt-0.5 shrink-0">
               {messageTone === "success" ? (
                 <CheckCircle2 className="h-5 w-5" />
               ) : messageTone === "error" ? (
@@ -3185,7 +3185,10 @@ export function PosPage() {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium leading-5">{message}</p>
+              {messageTone === "error" ? (
+                <p className="pos-floating-message-kicker mb-1 text-[10px] font-semibold uppercase tracking-[0.2em]">Alerte caisse</p>
+              ) : null}
+              <p className="pos-floating-message-text text-sm font-medium leading-5">{message}</p>
             </div>
             <button
               type="button"

@@ -122,6 +122,38 @@ select.select-base option:checked {
   @apply inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-[#e6d7c8];
 }
 
+.pos-floating-message-error {
+  border-color: rgba(251, 146, 60, 0.38) !important;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(251, 146, 60, 0.18), transparent 34%),
+    linear-gradient(135deg, rgba(55, 21, 18, 0.98), rgba(34, 19, 16, 0.97)) !important;
+  box-shadow:
+    0 24px 58px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(248, 113, 113, 0.12),
+    inset 0 1px 0 rgba(255, 226, 190, 0.08) !important;
+}
+
+.pos-floating-message-error .pos-floating-message-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: rgba(248, 113, 113, 0.16);
+  color: #fecaca;
+  box-shadow: 0 0 0 6px rgba(248, 113, 113, 0.08);
+}
+
+.pos-floating-message-kicker {
+  color: #fdba74;
+}
+
+.pos-floating-message-error .pos-floating-message-text {
+  color: #fff2ec;
+  font-weight: 700;
+}
+
 .metric-value {
   @apply text-sm font-semibold tracking-tight text-white md:text-[1.1rem];
 }
@@ -1025,6 +1057,35 @@ html[data-theme="light"] button.bg-rose-400\/10 {
   background:
     linear-gradient(135deg, rgba(190, 18, 60, 0.96), rgba(220, 38, 38, 0.94)) !important;
   color: #fff7f7 !important;
+}
+
+html[data-theme="light"] .pos-floating-message-error {
+  border-color: rgba(127, 29, 29, 0.38) !important;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 138, 31, 0.18), transparent 32%),
+    linear-gradient(135deg, rgba(255, 250, 242, 0.98), rgba(254, 226, 226, 0.95)) !important;
+  color: #7f1d1d !important;
+  box-shadow:
+    0 24px 58px rgba(74, 48, 30, 0.22),
+    0 0 0 1px rgba(127, 29, 29, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+}
+
+html[data-theme="light"] .pos-floating-message-error .pos-floating-message-icon {
+  background:
+    linear-gradient(135deg, rgba(220, 38, 38, 0.95), rgba(127, 29, 29, 0.92)) !important;
+  color: #fff7f7 !important;
+  box-shadow:
+    0 0 0 6px rgba(220, 38, 38, 0.10),
+    0 12px 22px rgba(127, 29, 29, 0.20) !important;
+}
+
+html[data-theme="light"] .pos-floating-message-kicker {
+  color: #9f1239 !important;
+}
+
+html[data-theme="light"] .pos-floating-message-error .pos-floating-message-text {
+  color: #7f1d1d !important;
 }
 
 html[data-theme="light"] .cashier-reminder-card {
