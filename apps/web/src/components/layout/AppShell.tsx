@@ -2467,18 +2467,18 @@ export function AppShell() {
               <div className="pointer-events-none fixed right-6 top-24 z-[71] flex max-w-[380px] justify-end">
                 <button
                   type="button"
-                  className="pointer-events-auto flex w-full items-start gap-3 rounded-[22px] border border-orange-300/25 bg-[#1b130e]/95 px-4 py-3 text-left shadow-[0_22px_48px_rgba(0,0,0,0.35)] backdrop-blur"
+                  className="cashier-reminder-card pointer-events-auto flex w-full items-start gap-3 rounded-[22px] border border-orange-300/25 bg-[#1b130e]/95 px-4 py-3 text-left shadow-[0_22px_48px_rgba(0,0,0,0.35)] backdrop-blur"
                   onClick={() => void handleCashierSessionReminder()}
                 >
-                  <span className="mt-1 inline-flex h-3 w-3 shrink-0 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_0_6px_rgba(74,222,128,0.18)]" />
+                  <span className="cashier-reminder-dot mt-1 inline-flex h-3 w-3 shrink-0 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_0_6px_rgba(74,222,128,0.18)]" />
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-orange-200/80">
+                    <span className="cashier-reminder-kicker flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-orange-200/80">
                       <Bell className="h-3.5 w-3.5" />
                       Notification caisse
                     </span>
-                    <span className="mt-1 block text-sm font-semibold text-white">{cashierSessionReminder.title}</span>
-                    <span className="mt-1 block text-xs leading-5 text-[#dbcab8]">{cashierSessionReminder.message}</span>
-                    <span className="mt-2 inline-flex rounded-full border border-orange-300/30 bg-orange-300/12 px-3 py-1 text-[11px] font-semibold text-orange-100">
+                    <span className="cashier-reminder-title mt-1 block text-sm font-semibold text-white">{cashierSessionReminder.title}</span>
+                    <span className="cashier-reminder-message mt-1 block text-xs leading-5 text-[#dbcab8]">{cashierSessionReminder.message}</span>
+                    <span className="cashier-reminder-action mt-2 inline-flex rounded-full border border-orange-300/30 bg-orange-300/12 px-3 py-1 text-[11px] font-semibold text-orange-100">
                       {cashierSessionReminder.actionLabel}
                     </span>
                   </span>
