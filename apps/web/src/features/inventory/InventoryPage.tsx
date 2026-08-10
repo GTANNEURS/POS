@@ -111,7 +111,7 @@ export function InventoryPage() {
     setOverview(bootstrap.overview);
     setForm((current) => ({
       ...current,
-      productId: current.productId || bootstrap.overview[0]?.id || bootstrap.products[0]?.id || "",
+      productId: current.productId || "",
       warehouseId: current.warehouseId || user?.defaultWarehouse?.id || bootstrap.warehouses[0]?.id || ""
     }));
     setTransferForm((current) => ({
@@ -143,7 +143,8 @@ export function InventoryPage() {
     });
     setSaving(false);
     setAdjustmentModalOpen(false);
-    setForm((current) => ({ ...current, quantity: "0", reason: "Ajustement inventaire" }));
+    setAdjustmentSearch("");
+    setForm((current) => ({ ...current, productId: "", variantId: "", quantity: "0", reason: "Ajustement inventaire" }));
     await load();
   }
 
@@ -230,8 +231,9 @@ export function InventoryPage() {
 
   const adjustmentProducts = useMemo(() => {
     const query = adjustmentSearch.trim().toLowerCase();
+    if (!query) return [];
     const source = overview;
-    const rows = !query ? source : source.filter((product) =>
+    const rows = source.filter((product) =>
       product.name.toLowerCase().includes(query)
       || String(product.reference ?? "").toLowerCase().includes(query)
       || product.variants.some((variant) =>
@@ -269,8 +271,9 @@ export function InventoryPage() {
   );
   const adjustmentDelta = Number(form.quantity || 0);
   const adjustmentNextQuantity = adjustmentCurrentQuantity + adjustmentDelta;
+  const adjustmentProductRequired = !form.productId;
   const adjustmentVariantRequired = (selectedAdjustmentProduct?.variants.length ?? 0) > 0 && !form.variantId;
-  const adjustmentBlocked = adjustmentNextQuantity < 0 || adjustmentVariantRequired;
+  const adjustmentBlocked = adjustmentProductRequired || adjustmentNextQuantity < 0 || adjustmentVariantRequired;
 
   const selectedTransferProduct = useMemo(
     () => overview.find((item) => item.id === transferForm.productId),
@@ -412,12 +415,15 @@ export function InventoryPage() {
   }
 
   function openAdjustmentModal() {
-    const initialProduct = selectedAdjustmentProduct ?? overview[0] ?? null;
     setAdjustmentModalOpen(true);
-    setAdjustmentSearch(initialProduct ? (initialProduct.reference ? `${initialProduct.reference} - ${initialProduct.name}` : initialProduct.name) : "");
-    if (initialProduct && form.productId !== initialProduct.id) {
-      setForm((current) => ({ ...current, productId: initialProduct.id, variantId: "" }));
-    }
+    setAdjustmentSearch("");
+    setForm((current) => ({
+      ...current,
+      productId: "",
+      variantId: "",
+      quantity: "0",
+      reason: "Ajustement inventaire"
+    }));
   }
 
   function closeTransferModal() {
@@ -811,9 +817,9 @@ export function InventoryPage() {
       </div>
 
       {adjustmentModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#050403]/82 p-4 backdrop-blur-[2px]" onMouseDown={() => !saving && setAdjustmentModalOpen(false)}>
-          <div className="w-full max-w-[720px] rounded-[30px] border border-white/12 bg-[linear-gradient(180deg,#17120f,#100c0a)] shadow-[0_32px_90px_rgba(0,0,0,0.55)]" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-5 py-4 md:px-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#050403]/82 p-3 backdrop-blur-[2px] md:p-4">
+          <div className="flex h-[calc(100vh-1.5rem)] w-full max-w-[760px] flex-col overflow-hidden rounded-[30px] border border-white/12 bg-[linear-gradient(180deg,#17120f,#100c0a)] shadow-[0_32px_90px_rgba(0,0,0,0.55)] md:h-[calc(100vh-2rem)]" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="shrink-0 flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-5 py-4 md:px-6">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-orange-300/75">Stock</p>
                 <h2 className="mt-1 text-xl font-semibold text-white">Ajustement de stock</h2>
@@ -823,11 +829,12 @@ export function InventoryPage() {
               </button>
             </div>
 
-            <form className="space-y-4 px-5 py-5 md:px-6" onSubmit={submitAdjustment}>
+            <form className="flex min-h-0 flex-1 flex-col" onSubmit={submitAdjustment}>
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 md:px-6">
               <Field label="Article">
                 <div className="space-y-3">
                   <Input placeholder="Rechercher par reference ou article..." value={adjustmentSearch} onChange={(e) => setAdjustmentSearch(e.target.value)} />
-                  <div className="max-h-[190px] space-y-2 overflow-auto rounded-[20px] border border-white/10 bg-black/20 p-2">
+                  <div className="max-h-[170px] space-y-2 overflow-auto rounded-[20px] border border-white/10 bg-black/20 p-2">
                     {adjustmentProducts.map((product) => {
                       const isSelected = form.productId === product.id;
                       return (
@@ -853,7 +860,7 @@ export function InventoryPage() {
                     })}
                     {!adjustmentProducts.length ? (
                       <div className="rounded-[18px] border border-white/10 bg-black/20 px-3 py-4 text-center text-sm text-[#bcae9f]">
-                        Aucun article trouve pour cette recherche.
+                        {adjustmentSearch.trim() ? "Aucun article trouve pour cette recherche." : "Saisis ou scanne une reference pour afficher les articles."}
                       </div>
                     ) : null}
                   </div>
@@ -905,6 +912,11 @@ export function InventoryPage() {
               <Field label="Quantite a ajuster (+ / -)">
                 <Input type="number" value={form.quantity} onChange={(e) => setForm((current) => ({ ...current, quantity: e.target.value }))} />
               </Field>
+              {adjustmentProductRequired ? (
+                <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                  Choisis d'abord un article dans la liste.
+                </div>
+              ) : null}
               {adjustmentVariantRequired ? (
                 <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
                   Choisis la variante a ajuster pour cet article.
@@ -918,8 +930,9 @@ export function InventoryPage() {
               <Field label="Motif">
                 <Input value={form.reason} onChange={(e) => setForm((current) => ({ ...current, reason: e.target.value }))} />
               </Field>
+              </div>
 
-              <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+              <div className="shrink-0 flex justify-end gap-3 border-t border-white/10 px-5 py-4 md:px-6">
                 <Button variant="secondary" type="button" className="!h-9 !px-3.5 !text-[12px]" onClick={() => !saving && setAdjustmentModalOpen(false)}>Annuler</Button>
                 <Button type="submit" className="!h-9 !px-3.5 !text-[12px]" disabled={adjustmentBlocked || saving}>{saving ? "Enregistrement..." : "Valider l'ajustement"}</Button>
               </div>
