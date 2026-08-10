@@ -1154,7 +1154,7 @@ posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req
     readVariantStockBalances()
   ]);
 
-  const rows = products.reduce<Array<{ id: string; productId: string; variantId: string | null; name: string; reference: string; barcode: string | null; salePriceTtc: number; stockOnHand: number; color: string | null; size: string | null }>>((acc, product) => {
+  const rows = products.reduce<Array<{ id: string; productId: string; variantId: string | null; name: string; reference: string; barcode: string | null; salePriceTtc: number; stockOnHand: number; color: string | null; size: string | null; imageUrl: string | null }>>((acc, product) => {
     if (!product.variants.length) {
       const locationStock = queryWarehouseId ? getLocationStock(stockBalances, product.id, queryWarehouseId) : getProductStockTotal(stockBalances, product.id);
       acc.push({
@@ -1167,7 +1167,8 @@ posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req
         salePriceTtc: Number(product.salePriceTtc),
         stockOnHand: locationStock || product.stockOnHand,
         color: null,
-        size: null
+        size: null,
+        imageUrl: product.imageUrl
       });
       return acc;
     }
@@ -1196,7 +1197,8 @@ posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req
           salePriceTtc: Number(product.salePriceTtc),
           stockOnHand: locationStock || variant.stockOnHand,
           color: variant.color,
-          size: variant.size
+          size: variant.size,
+          imageUrl: product.imageUrl
         });
       });
 

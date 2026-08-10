@@ -7,7 +7,7 @@ import { hasCachedOpenCashSession, isNetworkError, queueOfflineCheckout, readPos
 import { Button, EmptyState, Field, Input, LoadingBlock, SectionCard, Select } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
-type Product = { id: string; productId: string; variantId?: string | null; name: string; reference: string; barcode?: string | null; salePriceTtc: number; stockOnHand: number; color?: string | null; size?: string | null };
+type Product = { id: string; productId: string; variantId?: string | null; name: string; reference: string; barcode?: string | null; salePriceTtc: number; stockOnHand: number; color?: string | null; size?: string | null; imageUrl?: string | null };
 type Customer = { id: string; fullName: string; phone?: string | null; email?: string | null };
 type Warehouse = { id: string; name: string; type?: string; address?: string | null; phone?: string | null };
 type CashRegister = { id: string; name: string; warehouseId: string };
@@ -60,7 +60,7 @@ type PosBootstrapPayload = {
     ticketPrintProfiles?: TicketPrintProfiles | null;
   };
 };
-type CartLine = { lineId: string; productId: string; variantId?: string | null; reference?: string; barcode?: string | null; name: string; color?: string | null; size?: string | null; quantity: number; price: number; discountAmount: number; kind?: "PRODUCT" | "ORDER_DEPOSIT"; orderSource?: "POS" | "LEGACY"; orderType?: string; orderNumber?: string; orderTotal?: number; depositAmount?: number };
+type CartLine = { lineId: string; productId: string; variantId?: string | null; reference?: string; barcode?: string | null; name: string; color?: string | null; size?: string | null; imageUrl?: string | null; quantity: number; price: number; discountAmount: number; kind?: "PRODUCT" | "ORDER_DEPOSIT"; orderSource?: "POS" | "LEGACY"; orderType?: string; orderNumber?: string; orderTotal?: number; depositAmount?: number };
 type TicketTab = "payment" | "hold";
 type HeldTicket = {
   id: string;
@@ -976,6 +976,7 @@ export function PosPage() {
         name: product.name,
         color: product.color ?? null,
         size: product.size ?? null,
+        imageUrl: product.imageUrl ?? null,
         quantity: 1,
         price: Number(product.salePriceTtc),
         discountAmount: 0
@@ -3389,12 +3390,26 @@ export function PosPage() {
             className={`flex flex-col gap-3 rounded-[18px] border border-white/10 bg-white/5 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between ${line.kind !== "ORDER_DEPOSIT" ? "cursor-pointer transition hover:border-orange-300/30 hover:bg-white/7" : ""}`}
             onDoubleClick={() => openTicketLineActionModal(line)}
           >
-            <div className="min-w-0">
-              <div className="truncate font-medium text-white">{line.name}</div><div className="mt-1 text-[11px] text-[#baa999]">{[line.reference, line.barcode, line.color, line.size].filter(Boolean).join(" - ")}</div>
-              <div className="mt-1 text-xs text-[#baa999]">
-                {line.quantity} x {formatCurrency(line.price)}
-                {line.price <= 0 ? <span className="ml-2 text-emerald-200">Offert</span> : null}
-                {line.discountAmount > 0 ? <span className="ml-2 text-orange-100">Remise {formatCurrency(line.discountAmount)}</span> : null}
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="cart-item-thumb flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-[15px] border border-white/10 bg-black/20 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#b9aa9b]">
+                {line.imageUrl ? (
+                  <img
+                    src={line.imageUrl}
+                    alt={line.name}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <span>{line.kind === "ORDER_DEPOSIT" ? "CMD" : "GDT"}</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate font-medium text-white">{line.name}</div><div className="mt-1 text-[11px] text-[#baa999]">{[line.reference, line.barcode, line.color, line.size].filter(Boolean).join(" - ")}</div>
+                <div className="mt-1 text-xs text-[#baa999]">
+                  {line.quantity} x {formatCurrency(line.price)}
+                  {line.price <= 0 ? <span className="ml-2 text-emerald-200">Offert</span> : null}
+                  {line.discountAmount > 0 ? <span className="ml-2 text-orange-100">Remise {formatCurrency(line.discountAmount)}</span> : null}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:justify-end">
