@@ -8,6 +8,7 @@ type Permission = { id: string; code: string; name?: string; label: string };
 type Role = { id: string; name: string; label: string; rolePermissions: Array<{ permission: Permission }> };
 type UserLoginMode = "admin" | "manager" | "caissier" | "operateur" | "autre";
 type UserGroupTab = "admins" | "managers" | "caissiers" | "operateurs";
+type BoutiqueTeamTab = "managers" | "caissiers" | "operateurs" | "vendeurs";
 type UserRow = {
   id: string;
   fullName: string;
@@ -287,12 +288,18 @@ const tabs: Array<{ key: SettingsTab; label: string }> = [
   { key: "societe", label: "Societe" },
   { key: "tickets", label: "Tickets" },
   { key: "boutique", label: "Boutique" },
-  { key: "utilisateurs", label: "Utilisateurs" },
-  { key: "vendeurs", label: "Vendeurs" },
+  { key: "utilisateurs", label: "Admins" },
   { key: "couleurs", label: "Couleurs" },
   { key: "tailles", label: "Tailles" },
   { key: "devises", label: "Devises" },
   { key: "paiements", label: "Modes de paiement" }
+];
+
+const boutiqueTeamTabs: Array<{ key: BoutiqueTeamTab; label: string; roleName?: string }> = [
+  { key: "managers", label: "Managers", roleName: "manager" },
+  { key: "caissiers", label: "Caissiers", roleName: "caissier" },
+  { key: "operateurs", label: "Operateurs", roleName: "operateur_commandes" },
+  { key: "vendeurs", label: "Vendeurs" }
 ];
 
 function toList(value: string) {
@@ -384,7 +391,7 @@ function primaryUserMode(user: Pick<UserRow, "roles" | "loginMode">) {
   return "autre" as const;
 }
 
-function buildNewUserDraft(tab: UserGroupTab = "caissiers") {
+function buildNewUserDraft(tab: UserGroupTab | BoutiqueTeamTab = "caissiers", defaultWarehouseId = "") {
   const roleNames =
     tab === "admins" ? ["admin"] :
     tab === "managers" ? ["manager"] :
@@ -397,7 +404,7 @@ function buildNewUserDraft(tab: UserGroupTab = "caissiers") {
     password: "ChangeMe123!",
     roleNames,
     isActive: true,
-    defaultWarehouseId: "",
+    defaultWarehouseId,
     loginUsername: "",
     pinCode: ""
   };
@@ -549,6 +556,7 @@ export function SettingsPage() {
   const [selectedUserPassword, setSelectedUserPassword] = useState("");
   const [newUserOpen, setNewUserOpen] = useState(false);
   const [userGroupTab, setUserGroupTab] = useState<UserGroupTab>("admins");
+  const [boutiqueTeamTab, setBoutiqueTeamTab] = useState<BoutiqueTeamTab>("managers");
   const [newUser, setNewUser] = useState(buildNewUserDraft("admins"));
   const [selectedPrintType, setSelectedPrintType] = useState<TicketPrintType>("cash");
 
@@ -561,6 +569,10 @@ export function SettingsPage() {
   const groupedCashierUsers = userRows.filter((user) => primaryUserMode(user) === "caissier");
   const operatorUsers = userRows.filter((user) => primaryUserMode(user) === "operateur");
   const selectedBoutiqueCashiers = selectedBoutique ? cashierRows.filter((user) => user.defaultWarehouseId === selectedBoutique.id) : [];
+  const selectedBoutiqueManagers = selectedBoutique ? managerUsers.filter((user) => user.defaultWarehouseId === selectedBoutique.id) : [];
+  const selectedBoutiqueOperators = selectedBoutique ? operatorUsers.filter((user) => user.defaultWarehouseId === selectedBoutique.id) : [];
+  const selectedBoutiqueSellers = selectedBoutique ? sellerRows.filter((seller) => seller.boutiqueId === selectedBoutique.id || selectedBoutique.sellerNames.includes(seller.fullName)) : [];
+  const selectedBoutiqueTeamCount = selectedBoutiqueManagers.length + selectedBoutiqueCashiers.length + selectedBoutiqueOperators.length + selectedBoutiqueSellers.length;
   const selectedUserMode = selectedUser ? primaryUserMode(selectedUser) : "manager";
   const newUserMode = primaryUserMode({
     roles: newUser.roleNames,
@@ -766,22 +778,37 @@ export function SettingsPage() {
     setMessage(null);
     try {
       await api("/settings/boutiques", { method: "PUT", body: JSON.stringify({ boutiques }) });
-      const changedCashiers = userRows.filter((user) => user.roles.includes("caissier")).filter((user) => {
+      const changedTeamUsers = userRows.filter((user) => primaryUserMode(user) !== "admin").filter((user) => {
         const initialUser = initialUserRows.find((item) => item.id === user.id);
         return (initialUser?.defaultWarehouseId ?? null) !== (user.defaultWarehouseId ?? null);
       });
-      if (changedCashiers.length) {
-        await Promise.all(changedCashiers.map((cashier) => api<UserRow>(`/users/${cashier.id}`, {
+      if (changedTeamUsers.length) {
+        await Promise.all(changedTeamUsers.map((user) => api<UserRow>(`/users/${user.id}`, {
           method: "PUT",
           body: JSON.stringify({
-            fullName: cashier.fullName,
-            email: cashier.email,
+            fullName: user.fullName,
+            email: user.email,
             password: "",
-            roleNames: cashier.roles,
-            isActive: cashier.isActive,
-            defaultWarehouseId: cashier.defaultWarehouseId || null
+            roleNames: user.roles,
+            isActive: user.isActive,
+            defaultWarehouseId: user.defaultWarehouseId || null,
+            loginUsername: user.loginUsername || "",
+            pinCode: user.pinCode || ""
           })
         })));
+      }
+      if (sellerRows.length) {
+        await api("/settings/sellers", {
+          method: "PUT",
+          body: JSON.stringify({
+            sellers: sellerRows.map((seller) => ({
+              id: seller.id,
+              boutiqueId: seller.boutiqueId || null,
+              commissionRate: Number(seller.commissionRate || 0),
+              categoryIds: seller.categoryIds || []
+            }))
+          })
+        });
       }
       setMessage("Boutiques mises a jour.");
       setEditingBoutique(false);
@@ -789,6 +816,52 @@ export function SettingsPage() {
       await load();
     } catch {
       setMessage("Sauvegarde boutique indisponible. Relance l'API pour activer la nouvelle route.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveBoutiqueTeam() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      await api("/settings/boutiques", { method: "PUT", body: JSON.stringify({ boutiques }) });
+      const changedTeamUsers = userRows.filter((user) => primaryUserMode(user) !== "admin").filter((user) => {
+        const initialUser = initialUserRows.find((item) => item.id === user.id);
+        return (initialUser?.defaultWarehouseId ?? null) !== (user.defaultWarehouseId ?? null);
+      });
+      if (changedTeamUsers.length) {
+        await Promise.all(changedTeamUsers.map((user) => api<UserRow>(`/users/${user.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            fullName: user.fullName,
+            email: user.email,
+            password: "",
+            roleNames: user.roles,
+            isActive: user.isActive,
+            defaultWarehouseId: user.defaultWarehouseId || null,
+            loginUsername: user.loginUsername || "",
+            pinCode: user.pinCode || ""
+          })
+        })));
+      }
+      if (sellerRows.length) {
+        await api("/settings/sellers", {
+          method: "PUT",
+          body: JSON.stringify({
+            sellers: sellerRows.map((seller) => ({
+              id: seller.id,
+              boutiqueId: seller.boutiqueId || null,
+              commissionRate: Number(seller.commissionRate || 0),
+              categoryIds: seller.categoryIds || []
+            }))
+          })
+        });
+      }
+      setMessage("Equipe boutique mise a jour.");
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Sauvegarde equipe boutique impossible.");
     } finally {
       setSaving(false);
     }
@@ -896,7 +969,7 @@ export function SettingsPage() {
     try {
       const created = await api<UserRow>("/users", { method: "POST", body: JSON.stringify(newUser) });
       setUserRows((current) => [created, ...current]);
-      setNewUser(buildNewUserDraft(userGroupTab));
+      setNewUser(activeTab === "boutique" && selectedBoutique ? buildNewUserDraft(boutiqueTeamTab, selectedBoutique.id) : buildNewUserDraft(userGroupTab));
       setNewUserOpen(false);
       setMessage("Utilisateur cree.");
       await load();
@@ -1336,6 +1409,46 @@ export function SettingsPage() {
     }));
   }
 
+  function toggleBoutiqueUser(boutiqueId: string, userId: string) {
+    setUserRows((current) => current.map((user) => {
+      if (user.id !== userId) return user;
+      return {
+        ...user,
+        defaultWarehouseId: user.defaultWarehouseId === boutiqueId ? null : boutiqueId
+      };
+    }));
+  }
+
+  function toggleBoutiqueSellerAssignment(boutiqueId: string, sellerId: string) {
+    setSellerRows((current) => current.map((seller) => {
+      if (seller.id !== sellerId) return seller;
+      const isAttached = seller.boutiqueId === boutiqueId;
+      return {
+        ...seller,
+        boutiqueId: isAttached ? null : boutiqueId,
+        boutiqueName: isAttached ? "" : sellerBoutiques.find((boutique) => boutique.id === boutiqueId)?.name ?? selectedBoutique?.name ?? ""
+      };
+    }));
+  }
+
+  function openBoutiqueUserCreate(tab: Exclude<BoutiqueTeamTab, "vendeurs">) {
+    if (!selectedBoutique) return;
+    setBoutiqueTeamTab(tab);
+    setSelectedUserId(null);
+    setNewSellerOpen(false);
+    setNewUser(buildNewUserDraft(tab, selectedBoutique.id));
+    setNewUserOpen(true);
+  }
+
+  function openBoutiqueSellerCreate() {
+    if (!selectedBoutique) return;
+    setBoutiqueTeamTab("vendeurs");
+    setSelectedSellerId(null);
+    setNewUserOpen(false);
+    setNewSeller({ fullName: "", boutiqueId: selectedBoutique.id, commissionRate: "0", categoryIds: [] });
+    setNewSellerOpen(true);
+  }
+
   async function createBoutique(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -1371,6 +1484,207 @@ export function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function renderBoutiqueTeamPanel() {
+    if (!selectedBoutique) return null;
+    const activeTeamTab = boutiqueTeamTabs.find((tab) => tab.key === boutiqueTeamTab) ?? boutiqueTeamTabs[0];
+    const userRowsForTab =
+      boutiqueTeamTab === "managers" ? managerUsers :
+      boutiqueTeamTab === "operateurs" ? operatorUsers :
+      boutiqueTeamTab === "caissiers" ? groupedCashierUsers :
+      [];
+    const attachedUserRows = userRowsForTab.filter((user) => user.defaultWarehouseId === selectedBoutique.id);
+    const addUserLabel =
+      boutiqueTeamTab === "managers" ? "Ajouter manager" :
+      boutiqueTeamTab === "operateurs" ? "Ajouter operateur" :
+      boutiqueTeamTab === "caissiers" ? "Ajouter caissier" :
+      "Ajouter vendeur";
+    const selectedUserForBoutique = selectedUser && primaryUserMode(selectedUser) !== "admin" ? selectedUser : null;
+    const selectedSellerForBoutique = selectedSeller && boutiqueTeamTab === "vendeurs" ? selectedSeller : null;
+
+    return (
+      <div className="rounded-[28px] border border-orange-300/15 bg-black/20 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-200/80">Equipe boutique</p>
+            <p className="mt-1 text-sm text-[#d6c8ba]">Managers, caissiers, operateurs et vendeurs rattaches a {selectedBoutique.name}.</p>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void saveBoutiqueTeam()} disabled={saving}>
+              {saving ? "Sauvegarde..." : "Sauvegarder equipe"}
+            </Button>
+            <Button
+              className="!px-3 !py-2 text-xs"
+              type="button"
+              onClick={() => {
+                if (boutiqueTeamTab === "vendeurs") {
+                  openBoutiqueSellerCreate();
+                } else {
+                  openBoutiqueUserCreate(boutiqueTeamTab);
+                }
+              }}
+            >
+              {addUserLabel}
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2 rounded-[22px] border border-white/10 bg-black/20 p-2">
+          {boutiqueTeamTabs.map((tab) => {
+            const count =
+              tab.key === "managers" ? selectedBoutiqueManagers.length :
+              tab.key === "caissiers" ? selectedBoutiqueCashiers.length :
+              tab.key === "operateurs" ? selectedBoutiqueOperators.length :
+              selectedBoutiqueSellers.length;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                className={`rounded-2xl px-3 py-2 text-xs font-semibold transition ${boutiqueTeamTab === tab.key ? "bg-orange-300 text-black shadow-[0_10px_24px_rgba(255,138,31,.18)]" : "text-[#e9dccc] hover:bg-white/5"}`}
+                onClick={() => {
+                  setBoutiqueTeamTab(tab.key);
+                  setNewUserOpen(false);
+                  setNewSellerOpen(false);
+                  setSelectedUserId(null);
+                  setSelectedSellerId(null);
+                }}
+              >
+                {tab.label} <span className="ml-1 opacity-70">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {newUserOpen && boutiqueTeamTab !== "vendeurs" ? (
+          <form className="mt-4 rounded-[24px] border border-orange-300/20 bg-orange-300/10 p-4" onSubmit={createUser}>
+            <div className="grid items-end gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <Field label="Nom complet"><Input value={newUser.fullName} onChange={(e) => setNewUser((current) => ({ ...current, fullName: e.target.value }))} required /></Field>
+              <Field label="Email"><Input type="email" value={newUser.email} onChange={(e) => setNewUser((current) => ({ ...current, email: e.target.value }))} required /></Field>
+              {newUserMode !== "caissier" ? <Field label="Mot de passe"><Input type="password" minLength={6} value={newUser.password} onChange={(e) => setNewUser((current) => ({ ...current, password: e.target.value }))} required /></Field> : null}
+              {newUserMode === "manager" || newUserMode === "operateur" ? <Field label="Identifiant"><Input value={newUser.loginUsername} onChange={(e) => setNewUser((current) => ({ ...current, loginUsername: e.target.value }))} placeholder={newUserMode === "operateur" ? "identifiant operateur" : "identifiant manager"} /></Field> : null}
+              {newUserMode === "caissier" ? <Field label="Code confidentiel"><Input value={newUser.pinCode} onChange={(e) => setNewUser((current) => ({ ...current, pinCode: e.target.value.replace(/\D+/g, "") }))} placeholder="laisse vide pour generer" /></Field> : null}
+              <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-[#eadccf]"><input type="checkbox" checked={newUser.isActive} onChange={(e) => setNewUser((current) => ({ ...current, isActive: e.target.checked }))} /> Actif</label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => setNewUserOpen(false)}>Annuler</Button>
+              <Button className="!px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Enregistrer"}</Button>
+            </div>
+          </form>
+        ) : null}
+
+        {newSellerOpen && boutiqueTeamTab === "vendeurs" ? (
+          <form className="mt-4 rounded-[24px] border border-orange-300/20 bg-orange-300/10 p-4" onSubmit={createSeller}>
+            <div className="grid items-end gap-3 md:grid-cols-3">
+              <Field label="Nom vendeur"><Input value={newSeller.fullName} onChange={(e) => setNewSeller((current) => ({ ...current, fullName: e.target.value }))} required /></Field>
+              <Field label="Taux commission %"><Input className="max-w-[150px]" type="number" step="0.01" min="0" value={newSeller.commissionRate} onChange={(e) => setNewSeller((current) => ({ ...current, commissionRate: e.target.value }))} /></Field>
+              <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-[#eadccf]"><input type="checkbox" checked={Boolean(newSeller.boutiqueId)} onChange={(e) => setNewSeller((current) => ({ ...current, boutiqueId: e.target.checked ? selectedBoutique.id : "" }))} /> Rattache a la boutique</label>
+            </div>
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-semibold text-[#efe3d7]">Categories affectees</p>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{sellerCategories.map((category) => { const checked = newSeller.categoryIds.includes(category.id); return <label key={category.id} className={`rounded-2xl border px-3 py-2 text-sm transition ${checked ? "border-orange-300/40 bg-orange-300/15 text-white" : "border-white/10 bg-black/20 text-[#dacdc0]"}`}><input className="mr-2" type="checkbox" checked={checked} onChange={() => toggleNewSellerCategory(category.id)} />{category.name}</label>; })}</div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => setNewSellerOpen(false)}>Annuler</Button>
+              <Button className="!px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Enregistrer"}</Button>
+            </div>
+          </form>
+        ) : null}
+
+        {selectedUserForBoutique && boutiqueTeamTab !== "vendeurs" ? (
+          <form className="mt-4 rounded-[24px] border border-white/10 bg-black/20 p-4" onSubmit={(event) => { event.preventDefault(); void saveUser(selectedUserForBoutique); }}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#d9c5b1]">Modifier {selectedUserForBoutique.fullName}</p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => printUserBadge(selectedUserForBoutique)}>Imprimer badge</Button>
+                <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void deleteUser(selectedUserForBoutique)}>Supprimer</Button>
+              </div>
+            </div>
+            <div className="grid items-end gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <Field label="Nom complet"><Input value={selectedUserForBoutique.fullName} onChange={(e) => updateUser(selectedUserForBoutique.id, { fullName: e.target.value })} /></Field>
+              <Field label="Email"><Input type="email" value={selectedUserForBoutique.email} onChange={(e) => updateUser(selectedUserForBoutique.id, { email: e.target.value })} /></Field>
+              {selectedUserMode === "manager" || selectedUserMode === "operateur" ? <Field label="Identifiant"><Input value={selectedUserForBoutique.loginUsername} onChange={(e) => updateUser(selectedUserForBoutique.id, { loginUsername: e.target.value })} /></Field> : null}
+              {selectedUserMode === "caissier" ? <Field label="Code confidentiel"><Input value={selectedUserForBoutique.pinCode} onChange={(e) => updateUser(selectedUserForBoutique.id, { pinCode: e.target.value.replace(/\D+/g, "") })} /></Field> : null}
+              {selectedUserMode !== "caissier" ? <Field label="Nouveau mot de passe"><Input type="password" minLength={6} value={selectedUserPassword} onChange={(e) => setSelectedUserPassword(e.target.value)} placeholder="Laisser vide" /></Field> : null}
+              <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-[#eadccf]"><input type="checkbox" checked={selectedUserForBoutique.isActive} onChange={(e) => updateUser(selectedUserForBoutique.id, { isActive: e.target.checked })} /> Actif</label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => { setSelectedUserId(null); setSelectedUserPassword(""); }}>Fermer</Button>
+              <Button className="!px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Enregistrement..." : "Sauvegarder"}</Button>
+            </div>
+          </form>
+        ) : null}
+
+        {selectedSellerForBoutique ? (
+          <form className="mt-4 rounded-[24px] border border-white/10 bg-black/20 p-4" onSubmit={submitSellers}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#d9c5b1]">Modifier {selectedSellerForBoutique.fullName}</p>
+              <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void deleteSeller(selectedSellerForBoutique)}>Supprimer</Button>
+            </div>
+            <div className="grid items-end gap-3 md:grid-cols-3">
+              <Field label="Vendeur"><Input value={selectedSellerForBoutique.fullName} readOnly /></Field>
+              <Field label="Taux commission %"><Input className="max-w-[150px]" type="number" step="0.01" min="0" value={selectedSellerForBoutique.commissionRate} onChange={(e) => updateSeller(selectedSellerForBoutique.id, { commissionRate: Number(e.target.value || 0) })} /></Field>
+              <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-[#eadccf]"><input type="checkbox" checked={selectedSellerForBoutique.boutiqueId === selectedBoutique.id} onChange={() => toggleBoutiqueSellerAssignment(selectedBoutique.id, selectedSellerForBoutique.id)} /> Rattache a la boutique</label>
+            </div>
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-semibold text-[#efe3d7]">Categories affectees</p>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{sellerCategories.map((category) => { const checked = selectedSellerForBoutique.categoryIds.includes(category.id); return <label key={category.id} className={`rounded-2xl border px-3 py-2 text-sm transition ${checked ? "border-orange-300/40 bg-orange-300/15 text-white" : "border-white/10 bg-black/20 text-[#dacdc0]"}`}><input className="mr-2" type="checkbox" checked={checked} onChange={() => toggleSellerCategory(selectedSellerForBoutique.id, category.id)} />{category.name}</label>; })}</div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => setSelectedSellerId(null)}>Fermer</Button>
+              <Button className="!px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Enregistrement..." : "Sauvegarder"}</Button>
+            </div>
+          </form>
+        ) : null}
+
+        <div className="mt-4">
+          {boutiqueTeamTab !== "vendeurs" ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {userRowsForTab.map((user) => {
+                const checked = user.defaultWarehouseId === selectedBoutique.id;
+                return (
+                  <div key={user.id} className={`rounded-2xl border p-3 transition ${checked ? "border-orange-300/35 bg-orange-300/10" : "border-white/10 bg-black/20"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <label className="flex min-w-0 items-start gap-2 text-[#eadccf]">
+                        <input className="mt-1" type="checkbox" checked={checked} onChange={() => toggleBoutiqueUser(selectedBoutique.id, user.id)} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-white">{user.fullName}</span>
+                          <span className="block truncate text-[11px] text-[#bcae9f]">{checked ? "Rattache a cette boutique" : boutiqueNameForUser(user)}</span>
+                        </span>
+                      </label>
+                      <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => { setSelectedUserId(user.id); setSelectedUserPassword(""); setNewUserOpen(false); }}>Gerer</Button>
+                    </div>
+                  </div>
+                );
+              })}
+              {!userRowsForTab.length ? <div className="text-sm text-[#bcae9f]">Aucun {activeTeamTab.label.toLowerCase()} disponible.</div> : null}
+              {userRowsForTab.length && !attachedUserRows.length ? <div className="text-sm text-[#bcae9f]">Aucun {activeTeamTab.label.toLowerCase()} rattache a cette boutique.</div> : null}
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {sellerRows.map((seller) => {
+                const checked = seller.boutiqueId === selectedBoutique.id || selectedBoutique.sellerNames.includes(seller.fullName);
+                return (
+                  <div key={seller.id} className={`rounded-2xl border p-3 transition ${checked ? "border-orange-300/35 bg-orange-300/10" : "border-white/10 bg-black/20"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <label className="flex min-w-0 items-start gap-2 text-[#eadccf]">
+                        <input className="mt-1" type="checkbox" checked={checked} onChange={() => toggleBoutiqueSellerAssignment(selectedBoutique.id, seller.id)} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-white">{seller.fullName}</span>
+                          <span className="block truncate text-[11px] text-[#bcae9f]">{checked ? `${seller.commissionRate}% commission` : seller.boutiqueName || "Non affecte"}</span>
+                        </span>
+                      </label>
+                      <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => { setSelectedSellerId(seller.id); setNewSellerOpen(false); }}>Gerer</Button>
+                    </div>
+                  </div>
+                );
+              })}
+              {!sellerRows.length ? <div className="text-sm text-[#bcae9f]">Aucun vendeur disponible.</div> : null}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   if (loading) return <LoadingBlock label="Chargement des parametres..." />;
@@ -1581,17 +1895,16 @@ export function SettingsPage() {
               </form>
             ) : (
               <div className="space-y-5">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Boutique</p><p className="mt-1 text-sm font-semibold text-white">{selectedBoutique.name}</p></div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Sigle ticket</p><p className="mt-1 text-sm font-semibold text-white">{selectedBoutique.ticketPrefix || "Non renseigne"}</p></div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Telephone</p><p className="mt-1 text-sm font-semibold text-white">{selectedBoutique.phone || "Non renseigne"}</p></div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Responsable</p><p className="mt-1 text-sm font-semibold text-white">{selectedBoutique.managerName || "Non renseigne"}</p></div>
-                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Vendeurs</p><p className="mt-1 text-sm font-semibold text-white">{selectedBoutique.sellerNames.length}</p></div>
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Equipe</p><p className="mt-1 text-sm font-semibold text-white">{selectedBoutiqueTeamCount}</p></div>
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Caissiers</p><p className="mt-1 text-sm font-semibold text-white">{selectedBoutiqueCashiers.length}</p></div>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Adresse</p><p className="mt-1 text-xs text-[#efe3d7]">{selectedBoutique.address || "Aucune adresse"}</p></div>
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="mb-2 text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Vendeurs rattaches</p><div className="flex flex-wrap gap-2">{selectedBoutique.sellerNames.map((seller) => <span key={seller} className="badge !px-2 !py-1 text-[11px]">{seller}</span>)}{!selectedBoutique.sellerNames.length ? <span className="text-xs text-[#bcae9f]">Aucun vendeur rattache.</span> : null}</div></div>
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-3"><p className="mb-2 text-[10px] uppercase tracking-[0.16em] text-[#bba896]">Caissiers rattaches</p><div className="flex flex-wrap gap-2">{selectedBoutiqueCashiers.map((cashier) => <span key={cashier.id} className="badge !px-2 !py-1 text-[11px]">{cashier.fullName}</span>)}{!selectedBoutiqueCashiers.length ? <span className="text-xs text-[#bcae9f]">Aucun caissier rattache.</span> : null}</div></div>
+                {renderBoutiqueTeamPanel()}
               </div>
             )}
           </SectionCard>
@@ -1679,89 +1992,51 @@ export function SettingsPage() {
             ) : null}
           </SectionCard>
         ) : (
-          <SectionCard title="Utilisateurs" actions={<Button className="!px-3 !py-2 text-xs" type="button" onClick={() => {
+          <SectionCard title="Admins" actions={<Button className="!px-3 !py-2 text-xs" type="button" onClick={() => {
             setNewUserOpen((current) => {
               const next = !current;
               if (next) {
-                setNewUser(buildNewUserDraft(userGroupTab));
+                setUserGroupTab("admins");
+                setNewUser(buildNewUserDraft("admins"));
               }
               return next;
             });
-          }}>{newUserOpen ? "Fermer" : "Ajouter utilisateur"}</Button>}>
-            <div className="mb-5 flex flex-wrap gap-2 rounded-[22px] border border-white/10 bg-black/20 p-2">
-              {[
-                { key: "admins", label: "Admins" },
-                { key: "managers", label: "Managers" },
-                { key: "caissiers", label: "Caissiers" },
-                { key: "operateurs", label: "Operateurs" }
-              ].map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  className={`rounded-2xl px-4 py-2 text-xs font-semibold transition ${userGroupTab === tab.key ? "bg-orange-300 text-black" : "text-[#e9dccc] hover:bg-white/5"}`}
-                  onClick={() => {
-                    setUserGroupTab(tab.key as UserGroupTab);
-                    setNewUserOpen(false);
-                    setNewUser(buildNewUserDraft(tab.key as UserGroupTab));
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+          }}>{newUserOpen ? "Fermer" : "Ajouter admin"}</Button>}>
             {newUserOpen ? (
               <form className="mb-5 rounded-[26px] border border-orange-300/20 bg-orange-300/10 p-4" onSubmit={createUser}>
                 <div className="grid items-end gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <Field label="Nom complet"><Input value={newUser.fullName} onChange={(e) => setNewUser((current) => ({ ...current, fullName: e.target.value }))} required /></Field>
                   <Field label="Email"><Input type="email" value={newUser.email} onChange={(e) => setNewUser((current) => ({ ...current, email: e.target.value }))} required /></Field>
-                  <Field label="Boutique rattachee">
-                    <select className="input-base" value={newUser.defaultWarehouseId} onChange={(e) => setNewUser((current) => ({ ...current, defaultWarehouseId: e.target.value }))}>
-                      <option value="">Toutes boutiques</option>
-                      {userWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
-                    </select>
-                  </Field>
                   {newUserMode !== "caissier" ? <Field label="Mot de passe"><Input type="password" minLength={6} value={newUser.password} onChange={(e) => setNewUser((current) => ({ ...current, password: e.target.value }))} placeholder="6 caracteres minimum" required /></Field> : <div />}
                   {newUserMode === "manager" || newUserMode === "operateur" ? <Field label="Utilisateur"><Input value={newUser.loginUsername} onChange={(e) => setNewUser((current) => ({ ...current, loginUsername: e.target.value }))} placeholder={newUserMode === "operateur" ? "identifiant operateur" : "identifiant manager"} /></Field> : null}
                   {newUserMode === "caissier" ? <Field label="Code confidentiel"><Input value={newUser.pinCode} onChange={(e) => setNewUser((current) => ({ ...current, pinCode: e.target.value.replace(/\D+/g, "") }))} placeholder="laisse vide pour generer" /></Field> : null}
                   <label className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-[#eadccf]"><input type="checkbox" checked={newUser.isActive} onChange={(e) => setNewUser((current) => ({ ...current, isActive: e.target.checked }))} /> Actif</label>
                 </div>
-                <div className="mt-4">
-                  <p className="mb-2 text-sm font-semibold text-[#efe3d7]">Droits d'acces</p>
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{userRoles.map((role) => { const checked = newUser.roleNames.includes(role.name); return <label key={role.id} className={`rounded-2xl border px-3 py-2 text-sm transition ${checked ? "border-orange-300/40 bg-orange-300/15 text-white" : "border-white/10 bg-black/20 text-[#dacdc0]"}`}><input className="mr-2" type="checkbox" checked={checked} onChange={() => toggleNewUserRole(role.name)} />{role.label}</label>; })}</div>
-                </div>
+                <p className="mt-4 text-xs text-[#bcae9f]">Les managers, caissiers, operateurs et vendeurs se gerent maintenant dans la fiche de chaque boutique.</p>
                 <Button className="mt-4 !px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Enregistrer l'utilisateur"}</Button>
               </form>
             ) : null}
-            {(() => {
-              const currentGroup =
-                userGroupTab === "admins" ? { title: "Admins", rows: adminUsers } :
-                userGroupTab === "managers" ? { title: "Managers", rows: managerUsers } :
-                userGroupTab === "operateurs" ? { title: "Operateurs", rows: operatorUsers } :
-                { title: "Caissiers", rows: groupedCashierUsers };
-
-              return (
-                <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-xs uppercase tracking-[0.22em] text-[#d9c5b1]">{currentGroup.title}</p>
-                    <span className="badge !px-2 !py-1 text-[11px]">{currentGroup.rows.length}</span>
-                  </div>
-                  {currentGroup.rows.length ? (
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {currentGroup.rows.map((user) => (
-                        <button
-                          key={user.id}
-                          type="button"
-                          className="text-left"
-                          onClick={() => { setSelectedUserId(user.id); setEditingUser(false); setSelectedUserPassword(""); setUserDetailTab("infos"); }}
-                        >
-                          <AccessBadgeCard user={user} warehouseName={user.defaultWarehouseId ? userWarehouses.find((warehouse) => warehouse.id === user.defaultWarehouseId)?.name ?? "-" : "Toutes boutiques"} />
-                        </button>
-                      ))}
-                    </div>
-                  ) : <div className="text-sm text-[#bcae9f]">Aucun utilisateur.</div>}
+            <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-xs uppercase tracking-[0.22em] text-[#d9c5b1]">Administrateurs</p>
+                <span className="badge !px-2 !py-1 text-[11px]">{adminUsers.length}</span>
+              </div>
+              {adminUsers.length ? (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {adminUsers.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      className="rounded-2xl border border-white/10 bg-black/20 p-3 text-left transition hover:border-orange-300/30 hover:bg-orange-300/10"
+                      onClick={() => { setSelectedUserId(user.id); setEditingUser(false); setSelectedUserPassword(""); setUserDetailTab("infos"); }}
+                    >
+                      <span className="block truncate text-sm font-semibold text-white">{user.fullName}</span>
+                      <span className="mt-1 block truncate text-[11px] text-[#bcae9f]">{user.email}</span>
+                    </button>
+                  ))}
                 </div>
-              );
-            })()}
+              ) : <div className="text-sm text-[#bcae9f]">Aucun admin.</div>}
+            </div>
           </SectionCard>
         )
       ) : null}
