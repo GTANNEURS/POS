@@ -1175,7 +1175,7 @@ export function ProductsPage() {
                       <th>Prix vente TTC</th>
                       <th>{scopedWarehouseName ? `Stock ${scopedWarehouseName}` : "Stock global"}</th>
                       <th>Statut</th>
-                      {canEditProducts ? <th className="product-actions-sticky text-right">Actions</th> : null}
+                      {canEditProducts ? <th className="product-actions-sticky text-center">Actions</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -1218,9 +1218,9 @@ export function ProductsPage() {
                         </td>
                         {canEditProducts ? (
                           <td className="product-actions-sticky">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="secondary" className="px-3 py-2 text-sm" onClick={(event) => { event.stopPropagation(); void startEdit(item); }}><Pencil className="h-4 w-4" /></Button>
-                              <Button variant="secondary" className="px-3 py-2 text-sm" onClick={(event) => { event.stopPropagation(); void remove(item.id); }}><Trash2 className="h-4 w-4" /></Button>
+                            <div className="flex justify-center gap-1.5">
+                              <Button variant="secondary" className="!h-8 !w-8 !px-0 !py-0" onClick={(event) => { event.stopPropagation(); void startEdit(item); }}><Pencil className="h-3.5 w-3.5" /></Button>
+                              <Button variant="secondary" className="!h-8 !w-8 !px-0 !py-0" onClick={(event) => { event.stopPropagation(); void remove(item.id); }}><Trash2 className="h-3.5 w-3.5" /></Button>
                             </div>
                           </td>
                         ) : null}

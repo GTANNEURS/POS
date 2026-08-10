@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
 import { isNetworkError, isOfflineToken, loginOfflineCashier, rememberOfflineCashierLogin } from "../lib/offline";
 
@@ -28,6 +28,7 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -37,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return saved === "command_validation" ? "command_validation" : "full";
   });
   const [ready, setReady] = useState(false);
+  const inactivityTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -70,6 +72,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => setReady(true));
   }, [token]);
+
+  const logout = useCallback(async () => {
+    if (!isOfflineToken(token)) {
+      await api("/auth/logout", { method: "POST" }).catch(() => undefined);
+    }
+    localStorage.removeItem("gdt_access_token");
+    localStorage.removeItem("gdt_session_scope");
+    localStorage.removeItem("gdt_offline_user");
+    setToken(null);
+    setSessionScope("full");
+    setUser(null);
+  }, [token]);
+
+  useEffect(() => {
+    const handleTokenRefresh = (event: Event) => {
+      const detail = (event as CustomEvent<{ accessToken?: string; user?: User }>).detail;
+      if (detail?.accessToken) setToken(detail.accessToken);
+      if (detail?.user) setUser(detail.user);
+    };
+    const handleSessionExpired = () => {
+      localStorage.removeItem("gdt_access_token");
+      localStorage.removeItem("gdt_session_scope");
+      localStorage.removeItem("gdt_offline_user");
+      setToken(null);
+      setSessionScope("full");
+      setUser(null);
+    };
+    window.addEventListener("gdt:token-refreshed", handleTokenRefresh);
+    window.addEventListener("gdt:session-expired", handleSessionExpired);
+    return () => {
+      window.removeEventListener("gdt:token-refreshed", handleTokenRefresh);
+      window.removeEventListener("gdt:session-expired", handleSessionExpired);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!token) return undefined;
+
+    const resetInactivityTimer = () => {
+      if (inactivityTimerRef.current) window.clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = window.setTimeout(() => {
+        void logout();
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+
+    const activityEvents = ["pointerdown", "pointermove", "keydown", "touchstart", "wheel", "scan"] as const;
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, resetInactivityTimer, { passive: true }));
+    resetInactivityTimer();
+
+    return () => {
+      if (inactivityTimerRef.current) window.clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, resetInactivityTimer));
+    };
+  }, [logout, token]);
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
@@ -108,18 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.user);
       return data.user;
     },
-    async logout() {
-      if (!isOfflineToken(token)) {
-        await api("/auth/logout", { method: "POST" }).catch(() => undefined);
-      }
-      localStorage.removeItem("gdt_access_token");
-      localStorage.removeItem("gdt_session_scope");
-      localStorage.removeItem("gdt_offline_user");
-      setToken(null);
-      setSessionScope("full");
-      setUser(null);
-    }
-  }), [ready, sessionScope, token, user]);
+    logout
+  }), [logout, ready, sessionScope, token, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

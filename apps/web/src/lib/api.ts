@@ -8,8 +8,29 @@ const API_URL = resolveApiUrl();
 
 export type ApiOptions = RequestInit & { auth?: boolean };
 
-export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const token = localStorage.getItem("gdt_access_token");
+type RefreshResponse = {
+  accessToken: string;
+  user: unknown;
+};
+
+async function refreshAccessToken() {
+  const response = await fetch(`${API_URL}/auth/refresh`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false || !payload.data?.accessToken) {
+    throw new Error("Session expiree.");
+  }
+  const data = payload.data as RefreshResponse;
+  localStorage.setItem("gdt_access_token", data.accessToken);
+  localStorage.setItem("gdt_last_user", JSON.stringify(data.user));
+  window.dispatchEvent(new CustomEvent("gdt:token-refreshed", { detail: { accessToken: data.accessToken, user: data.user } }));
+  return data.accessToken;
+}
+
+async function fetchApi(path: string, options: ApiOptions, token: string | null) {
   const sessionScope = localStorage.getItem("gdt_session_scope");
   const headers = new Headers(options.headers || {});
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
@@ -26,11 +47,26 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     headers.set("X-GDT-Session-Scope", "command_validation");
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
+  return fetch(`${API_URL}${path}`, {
     ...options,
     credentials: "include",
     headers
   });
+}
+
+export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const token = localStorage.getItem("gdt_access_token");
+  let response = await fetchApi(path, options, token);
+
+  if (response.status === 401 && options.auth !== false && token && !token.startsWith("offline:") && path !== "/auth/refresh") {
+    try {
+      const nextToken = await refreshAccessToken();
+      response = await fetchApi(path, options, nextToken);
+    } catch {
+      localStorage.removeItem("gdt_access_token");
+      window.dispatchEvent(new Event("gdt:session-expired"));
+    }
+  }
 
   const contentType = response.headers.get("content-type") ?? "";
   const payload = contentType.includes("application/json")

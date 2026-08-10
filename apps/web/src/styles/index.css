@@ -186,7 +186,11 @@ select.select-base option:checked {
   position: sticky;
   right: 0;
   z-index: 2;
-  min-width: 116px;
+  width: 86px;
+  min-width: 86px;
+  max-width: 86px;
+  padding-left: 0.35rem !important;
+  padding-right: 0.35rem !important;
   background:
     linear-gradient(90deg, rgba(16, 12, 9, 0.72), rgba(18, 14, 11, 0.98) 28%),
     #120e0b;
