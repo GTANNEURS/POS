@@ -576,9 +576,14 @@ export function PosPage() {
     if (options.showLoading !== false) setLoading(true);
     let productList: Product[];
     let bootstrap: PosBootstrapPayload;
+    const catalogParams = new URLSearchParams();
+    if (query) catalogParams.set("query", query);
+    const catalogWarehouseId = form.warehouseId || user?.defaultWarehouse?.id || "";
+    if (catalogWarehouseId) catalogParams.set("warehouseId", catalogWarehouseId);
+    const catalogUrl = `/pos/catalog${catalogParams.toString() ? `?${catalogParams.toString()}` : ""}`;
     try {
       [productList, bootstrap] = await Promise.all([
-        api<Product[]>(`/pos/catalog${query ? `?query=${encodeURIComponent(query)}` : ""}`),
+        api<Product[]>(catalogUrl),
         api<PosBootstrapPayload>("/pos/bootstrap")
       ]);
       rememberPosSnapshot({ productList, bootstrap });

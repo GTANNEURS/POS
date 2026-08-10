@@ -95,6 +95,16 @@ function buildShortLabelReference(reference: string) {
   return normalized;
 }
 
+function buildVariantLabelReference(productReference: string, variantReference?: string | null) {
+  const productRef = buildShortLabelReference(productReference);
+  const variantRef = buildShortLabelReference(String(variantReference ?? ""));
+  if (!productRef) return variantRef;
+  if (!variantRef) return productRef;
+  if (variantRef === productRef || variantRef.startsWith(`${productRef}-`)) return variantRef;
+  const suffix = variantRef.split("-").filter(Boolean).at(-1);
+  return suffix ? `${productRef}-${suffix}` : productRef;
+}
+
 export function ProductDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -203,7 +213,7 @@ export function ProductDetailPage() {
         title: item.name,
         categoryLabel: item.category?.name ?? "Sans categorie",
         subtitle: variantLine,
-        reference: buildShortLabelReference(String(variant.reference ?? item.reference)),
+        reference: buildVariantLabelReference(item.reference, variant.reference),
         barcode: variantBarcode,
         priceLabel: formatCurrency(Number(item.salePriceTtc))
       });

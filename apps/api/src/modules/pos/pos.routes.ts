@@ -17,7 +17,10 @@ import {
   ensureProductStockSeeded,
   ensureVariantStockSeeded,
   getLocationStock,
+  getProductStockTotal,
+  getProductStockTotalFromVariantBalances,
   getVariantLocationStock,
+  getVariantStockTotal,
   readStockBalances,
   readVariantStockBalances,
   saveStockBalances,
@@ -527,6 +530,16 @@ function matchesCatalogQuery(values: Array<string | null | undefined>, query: st
       || (Boolean(compact) && textCompact.includes(compact))
       || (Boolean(compact) && textCompact.endsWith(compact));
   });
+}
+
+function buildCatalogVariantReference(productReference: string, variantReference?: string | null) {
+  const productRef = String(productReference ?? "").trim().toUpperCase();
+  const variantRef = String(variantReference ?? "").trim().toUpperCase();
+  if (!productRef) return variantRef;
+  if (!variantRef) return productRef;
+  if (variantRef === productRef || variantRef.startsWith(`${productRef}-`)) return variantRef;
+  const suffix = variantRef.split("-").filter(Boolean).at(-1);
+  return suffix ? `${productRef}-${suffix}` : productRef;
 }
 
 function buildDateStart(value: string) {
@@ -1110,8 +1123,11 @@ const cashReportQuerySchema = z.object({
   dateTo: z.string().optional()
 });
 
-posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req, res) => {
+posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const query = String(req.query.query ?? "").trim();
+  const scopedWarehouseId = getScopedWarehouseId(req.currentUser);
+  const queryWarehouseId = String(req.query.warehouseId ?? "").trim() || scopedWarehouseId || null;
+  if (queryWarehouseId) ensureWarehouseAccess(req.currentUser, queryWarehouseId);
   const products = await prisma.product.findMany({
     where: {
       status: "ACTIVE",
@@ -1133,9 +1149,14 @@ posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req
     include: { variants: true },
     take: 80
   });
+  const [stockBalances, variantStockBalances] = await Promise.all([
+    readStockBalances(),
+    readVariantStockBalances()
+  ]);
 
   const rows = products.reduce<Array<{ id: string; productId: string; variantId: string | null; name: string; reference: string; barcode: string | null; salePriceTtc: number; stockOnHand: number; color: string | null; size: string | null }>>((acc, product) => {
     if (!product.variants.length) {
+      const locationStock = queryWarehouseId ? getLocationStock(stockBalances, product.id, queryWarehouseId) : getProductStockTotal(stockBalances, product.id);
       acc.push({
         id: product.id,
         productId: product.id,
@@ -1144,7 +1165,7 @@ posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req
         reference: product.reference,
         barcode: product.barcode,
         salePriceTtc: Number(product.salePriceTtc),
-        stockOnHand: product.stockOnHand,
+        stockOnHand: locationStock || product.stockOnHand,
         color: null,
         size: null
       });
@@ -1163,15 +1184,17 @@ posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req
         Number(product.salePriceTtc).toString()
       ], query))
       .forEach((variant) => {
+        const displayReference = buildCatalogVariantReference(product.reference, variant.reference);
+        const locationStock = queryWarehouseId ? getVariantLocationStock(variantStockBalances, variant.id, queryWarehouseId) : getVariantStockTotal(variantStockBalances, variant.id);
         acc.push({
           id: variant.id,
           productId: product.id,
           variantId: variant.id,
           name: [product.name, variant.color, variant.size].filter(Boolean).join(" - "),
-          reference: variant.reference ?? product.reference,
+          reference: displayReference,
           barcode: variant.barcode ?? product.barcode,
           salePriceTtc: Number(product.salePriceTtc),
-          stockOnHand: variant.stockOnHand,
+          stockOnHand: locationStock || variant.stockOnHand,
           color: variant.color,
           size: variant.size
         });
