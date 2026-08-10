@@ -519,7 +519,14 @@ async function buildDeliveryOrderData(orderNumber: string) {
 function matchesCatalogQuery(values: Array<string | null | undefined>, query: string) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
-  return values.some((value) => String(value ?? "").toLowerCase().includes(normalized));
+  const compact = normalized.replace(/[^a-z0-9]+/g, "");
+  return values.some((value) => {
+    const text = String(value ?? "").trim().toLowerCase();
+    const textCompact = text.replace(/[^a-z0-9]+/g, "");
+    return text.includes(normalized)
+      || (Boolean(compact) && textCompact.includes(compact))
+      || (Boolean(compact) && textCompact.endsWith(compact));
+  });
 }
 
 function buildDateStart(value: string) {

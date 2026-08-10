@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, LoadingBlock, PageHeader, SectionCard, Select } from "../../components/ui/primitives";
 import { api } from "../../lib/api";
 import { buildCode39Svg, canEncodeCode39, normalizeCode39Value } from "../../lib/code39";
-import { cleanDisplayText, formatCurrency, formatDateTime, formatNumber } from "../../lib/format";
+import { cleanDisplayText, cleanWarehouseName, formatCurrency, formatDateTime, formatNumber } from "../../lib/format";
 import { useAuth } from "../../providers/AuthProvider";
 
 type StockMovement = {
@@ -129,7 +129,7 @@ export function ProductDetailPage() {
       .join("") || "AR";
   }, [item?.name]);
   const isAdminSession = user?.roles.includes("admin") ?? false;
-  const scopedWarehouseName = !isAdminSession ? (user?.defaultWarehouse?.name ?? item?.warehouse?.name ?? null) : null;
+  const scopedWarehouseName = !isAdminSession ? cleanWarehouseName(user?.defaultWarehouse?.name ?? item?.warehouse?.name ?? null) : null;
   const orderedLocationBalances = useMemo(() => {
     if (!item) return [];
     if (!user?.defaultWarehouse?.id) return item.locationBalances;
@@ -473,7 +473,7 @@ export function ProductDetailPage() {
             <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
               <p className="text-xs uppercase tracking-[0.22em] text-[#bdaa98]">Type / depot</p>
               <p className="mt-2 text-base font-semibold text-white">{item.type?.name ?? "-"}</p>
-              <p className="mt-1 text-xs text-[#b9aa9b]">{item.warehouse?.name ?? "Aucun depot"}</p>
+              <p className="mt-1 text-xs text-[#b9aa9b]">{cleanWarehouseName(item.warehouse?.name) || "Aucun depot"}</p>
             </div>
             <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
               <p className="text-xs uppercase tracking-[0.22em] text-[#bdaa98]">TVA / mise a jour</p>
@@ -527,7 +527,7 @@ export function ProductDetailPage() {
                         ? "product-variant-location product-variant-location-active rounded-[22px] border border-orange-300/35 bg-orange-300/12 px-4 py-3 text-left"
                         : "product-variant-location rounded-[22px] border border-white/10 bg-black/20 px-4 py-3 text-left transition hover:border-white/20 hover:bg-black/25"}
                     >
-                      <div className="text-sm font-semibold text-white">{location.warehouseName || "Boutique"}</div>
+                      <div className="text-sm font-semibold text-white">{cleanWarehouseName(location.warehouseName) || "Boutique"}</div>
                       <div className="mt-1 text-xs text-[#b9aa9b]">
                         {location.warehouseId === user?.defaultWarehouse?.id ? "Boutique courante" : "Autre boutique"}
                       </div>
@@ -547,7 +547,7 @@ export function ProductDetailPage() {
                   <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="product-variant-kicker text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300/75">Disponibilite variantes</p>
-                      <h3 className="product-variant-title mt-1 text-base font-semibold text-white">{activeVariantWarehouse.warehouseName || "Boutique"}</h3>
+                      <h3 className="product-variant-title mt-1 text-base font-semibold text-white">{cleanWarehouseName(activeVariantWarehouse.warehouseName) || "Boutique"}</h3>
                     </div>
                     <div className={selectedWarehouseVariantTotal < 0
                       ? "rounded-[18px] border border-rose-300/30 bg-rose-400/10 px-4 py-2 text-right"
@@ -640,7 +640,7 @@ export function ProductDetailPage() {
               {orderedLocationBalances.map((location) => (
                 <div key={location.warehouseId} className={`flex items-center justify-between rounded-[22px] border px-4 py-3 ${location.warehouseId === user?.defaultWarehouse?.id ? "border-orange-300/30 bg-orange-300/10" : "border-white/10 bg-black/20"}`}>
                   <div>
-                    <p className="text-sm font-semibold text-white">{location.warehouseName || "Emplacement"}</p>
+                    <p className="text-sm font-semibold text-white">{cleanWarehouseName(location.warehouseName) || "Emplacement"}</p>
                     <p className="mt-1 text-xs text-[#b9aa9b]">{location.warehouseId === user?.defaultWarehouse?.id ? "Boutique courante" : "Autre boutique"}</p>
                   </div>
                   <Badge tone={location.quantity > 0 ? "success" : location.quantity < 0 ? "danger" : "danger"}>{formatNumber(location.quantity)}</Badge>
@@ -670,7 +670,7 @@ export function ProductDetailPage() {
                   {item.stockMovements.map((movement) => (
                     <tr key={movement.id}>
                       <td>{movementLabels[movement.type]}</td>
-                      <td>{movement.warehouse?.name || "-"}</td>
+                      <td>{cleanWarehouseName(movement.warehouse?.name) || "-"}</td>
                       <td>{formatNumber(movement.quantity)}</td>
                       <td>{formatNumber(movement.beforeStock)} / {formatNumber(movement.afterStock)}</td>
                       <td>{movement.notes || "-"}</td>

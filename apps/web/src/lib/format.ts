@@ -40,6 +40,9 @@ export function cleanDisplayText(value: string | null | undefined) {
   return value
     .replace(/PiÃƒÆ’Ã‚Â¨ce|PiÃƒÂ¨ce|PiÃ¨ce|PiÃƒÆ’Â¨ce|PiÃ©ce/g, "Pièce")
     .replace(/MÃƒÆ’Ã‚Â¨tre|MÃƒÂ¨tre|MÃ¨tre|MÃƒÆ’Â¨tre/g, "Mètre")
+    .replace(/D�p�t/g, "Dépôt")
+    .replace(/DÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©pÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´t/g, "Dépôt")
+    .replace(/DÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©pÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â´t/g, "Dépôt")
     .replace(/DÃƒÆ’Ã‚Â©pÃƒÆ’Ã‚Â´t|DÃƒÂ©pÃƒÂ´t|DÃ©pÃ´t/g, "Dépôt")
     .replace(/ÃƒÆ’Ã‚Â©|ÃƒÂ©|Ã©/g, "é")
     .replace(/ÃƒÆ’Ã‚Â¨|ÃƒÂ¨|Ã¨/g, "è")
@@ -48,4 +51,16 @@ export function cleanDisplayText(value: string | null | undefined) {
     .replace(/ÃƒÆ’Ã‚Â¢|ÃƒÂ¢|Ã¢/g, "â")
     .replace(/ÃƒÆ’Ã‚Â |ÃƒÂ |Ã /g, "à")
     .replace(/ÃƒÆ’Ã‚Â§|ÃƒÂ§|Ã§/g, "ç");
+}
+
+export function cleanWarehouseName(value: string | null | undefined) {
+  const cleaned = cleanDisplayText(value)
+    .replace(/Entrepot/g, "Entrepôt")
+    .replace(/Depot/g, "Dépôt");
+
+  if (cleaned.includes("Central") && /D.|Ã|�/.test(value ?? "")) {
+    return "Dépôt Central";
+  }
+
+  return cleaned;
 }

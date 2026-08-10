@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 import { ArrowRightLeft, PackagePlus, X } from "lucide-react";
 import { api } from "../../lib/api";
-import { formatDateTime, formatNumber } from "../../lib/format";
+import { cleanDisplayText, formatDateTime, formatNumber } from "../../lib/format";
 import { Badge, Button, EmptyState, Field, Input, LoadingBlock, SectionCard, Select } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
@@ -52,13 +52,13 @@ type NegativeStockRow = {
 };
 
 function cleanWarehouseName(value: string) {
-  if (value.includes("Central") && /D.|Ã|�/.test(value)) return "Dépôt Central";
-  return value
-    .replaceAll("D�p�t", "Dépôt")
-    .replaceAll("DÃ©pÃ´t", "Dépôt")
-    .replaceAll("DÃƒÆ’Ã‚Â©pÃƒÆ’Ã‚Â´t", "Dépôt")
-    .replaceAll("DÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©pÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â´t", "Dépôt")
-    .replaceAll("Entrepot", "Entrepôt");
+  const depotLabel = "D\u00e9p\u00f4t";
+  const normalized = cleanDisplayText(value)
+    .replaceAll("Depot", depotLabel)
+    .replaceAll("Entrepot", "Entrep\u00f4t");
+  const hasEncodingMarker = value.includes("\u00c3") || value.includes("\ufffd") || value.includes("Depot");
+  if (normalized.includes("Central") && hasEncodingMarker) return `${depotLabel} Central`;
+  return normalized;
 }
 
 export function InventoryPage() {
@@ -126,6 +126,11 @@ export function InventoryPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (!adjustmentModalOpen) return;
+    window.setTimeout(() => document.querySelector<HTMLInputElement>("[data-stock-adjustment-search]")?.focus(), 40);
+  }, [adjustmentModalOpen]);
 
   async function submitAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -833,8 +838,8 @@ export function InventoryPage() {
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 md:px-6">
               <Field label="Article">
                 <div className="space-y-3">
-                  <Input placeholder="Rechercher par reference ou article..." value={adjustmentSearch} onChange={(e) => setAdjustmentSearch(e.target.value)} />
-                  <div className="max-h-[170px] space-y-2 overflow-auto rounded-[20px] border border-white/10 bg-black/20 p-2">
+                  <Input data-stock-adjustment-search placeholder="Rechercher par reference ou article..." value={adjustmentSearch} onChange={(e) => setAdjustmentSearch(e.target.value)} />
+                  <div className="stock-adjustment-results max-h-[170px] space-y-2 overflow-auto rounded-[20px] border border-white/10 bg-black/20 p-2">
                     {adjustmentProducts.map((product) => {
                       const isSelected = form.productId === product.id;
                       return (
@@ -843,8 +848,8 @@ export function InventoryPage() {
                           type="button"
                           onClick={() => selectAdjustmentProduct(product)}
                           className={isSelected
-                            ? "flex w-full items-center justify-between gap-3 rounded-[18px] border border-orange-300/40 bg-orange-300/14 px-3 py-2.5 text-left shadow-[0_10px_24px_rgba(255,138,31,.12)]"
-                            : "flex w-full items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-[#120e0c] px-3 py-2.5 text-left transition hover:border-orange-300/30 hover:bg-orange-300/8"}
+                            ? "stock-adjustment-result stock-adjustment-result-selected flex w-full items-center justify-between gap-3 rounded-[18px] border border-orange-300/40 bg-orange-300/14 px-3 py-2.5 text-left shadow-[0_10px_24px_rgba(255,138,31,.12)]"
+                            : "stock-adjustment-result flex w-full items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-[#120e0c] px-3 py-2.5 text-left transition hover:border-orange-300/30 hover:bg-orange-300/8"}
                         >
                           <span className="min-w-0">
                             <span className="block truncate text-sm font-semibold text-white">{product.reference ? `${product.reference} - ` : ""}{product.name}</span>
@@ -852,7 +857,7 @@ export function InventoryPage() {
                               {product.variants.length ? `${formatNumber(product.variants.length)} variante(s)` : "Article sans variante"}
                             </span>
                           </span>
-                          <span className={isSelected ? "rounded-full bg-orange-300 px-2.5 py-1 text-[11px] font-bold text-[#1d1209]" : "rounded-full border border-white/10 px-2.5 py-1 text-[11px] font-semibold text-[#d7c8b8]"}>
+                          <span className={isSelected ? "stock-adjustment-result-pill rounded-full bg-orange-300 px-2.5 py-1 text-[11px] font-bold text-[#1d1209]" : "stock-adjustment-result-pill rounded-full border border-white/10 px-2.5 py-1 text-[11px] font-semibold text-[#d7c8b8]"}>
                             {isSelected ? "Selectionne" : "Choisir"}
                           </span>
                         </button>
@@ -918,7 +923,7 @@ export function InventoryPage() {
                 </div>
               ) : null}
               {adjustmentVariantRequired ? (
-                <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                <div className="stock-adjustment-error-message rounded-2xl border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">
                   Choisis la variante a ajuster pour cet article.
                 </div>
               ) : null}

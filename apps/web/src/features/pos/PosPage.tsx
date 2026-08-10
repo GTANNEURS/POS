@@ -612,6 +612,26 @@ export function PosPage() {
     void load();
   }, []);
 
+  useEffect(() => {
+    if (!articleModalOpen) return;
+    window.setTimeout(() => document.querySelector<HTMLInputElement>("[data-pos-article-search]")?.focus(), 40);
+  }, [articleModalOpen]);
+
+  useEffect(() => {
+    if (!clientModalOpen) return;
+    window.setTimeout(() => document.querySelector<HTMLInputElement>("[data-pos-client-search]")?.focus(), 40);
+  }, [clientModalOpen]);
+
+  useEffect(() => {
+    if (!sellerModalOpen) return;
+    window.setTimeout(() => document.querySelector<HTMLInputElement>("[data-pos-seller-search]")?.focus(), 40);
+  }, [sellerModalOpen]);
+
+  useEffect(() => {
+    if (!voucherModalOpen && !creditNoteModalOpen && !deliveryOrderModalOpen) return;
+    window.setTimeout(() => document.querySelector<HTMLInputElement>("[data-pos-modal-search]")?.focus(), 40);
+  }, [voucherModalOpen, creditNoteModalOpen, deliveryOrderModalOpen]);
+
   const scannerCaptureEnabled = !articleModalOpen
     && !clientModalOpen
     && !sellerModalOpen
@@ -868,10 +888,12 @@ export function PosPage() {
   const filteredCatalog = useMemo(() => {
     const query = articleSearch.trim().toLowerCase();
     if (!query) return catalog.slice(0, 120);
-    const compactQuery = query.replace(/\s+/g, "");
+    const compactQuery = query.replace(/[^a-z0-9]+/g, "");
     return catalog.filter((product) => {
       const priceLabel = product.salePriceTtc.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\s+/g, "");
-      return product.name.toLowerCase().includes(query) || product.reference.toLowerCase().includes(query) || (product.barcode ?? "").toLowerCase().includes(query) || priceLabel.includes(compactQuery) || String(product.salePriceTtc).includes(compactQuery);
+      const searchText = [product.name, product.reference, product.barcode, product.color, product.size].filter(Boolean).join(" ").toLowerCase();
+      const compactText = searchText.replace(/[^a-z0-9]+/g, "");
+      return searchText.includes(query) || compactText.includes(compactQuery) || compactText.endsWith(compactQuery) || priceLabel.includes(compactQuery) || String(product.salePriceTtc).includes(compactQuery);
     }).slice(0, 120);
   }, [articleSearch, catalog]);
 
@@ -1193,7 +1215,18 @@ export function PosPage() {
   function findExactScannedProduct(products: Product[], code: string) {
     const normalizedCode = code.trim().toLowerCase();
     if (!normalizedCode) return undefined;
-    return products.find((product) => product.barcode?.trim().toLowerCase() === normalizedCode || product.reference.trim().toLowerCase() === normalizedCode);
+    const compactCode = normalizedCode.replace(/[^a-z0-9]+/g, "");
+    return products.find((product) => {
+      const reference = product.reference.trim().toLowerCase();
+      const barcode = product.barcode?.trim().toLowerCase() ?? "";
+      const referenceCompact = reference.replace(/[^a-z0-9]+/g, "");
+      const barcodeCompact = barcode.replace(/[^a-z0-9]+/g, "");
+      return barcode === normalizedCode
+        || reference === normalizedCode
+        || (Boolean(compactCode) && barcodeCompact === compactCode)
+        || (Boolean(compactCode) && referenceCompact === compactCode)
+        || (Boolean(compactCode) && referenceCompact.endsWith(compactCode));
+    });
   }
 
   function completeScan(product: Product) {
@@ -4347,6 +4380,7 @@ export function PosPage() {
               <Field label="Numero du bon achat">
                 <div className="flex gap-2">
                   <Input
+                    data-pos-modal-search
                     value={voucherNumberDraft}
                     onChange={(event) => setVoucherNumberDraft(event.target.value.toUpperCase())}
                     placeholder="Ex. BA-2026-0001"
@@ -4408,6 +4442,7 @@ export function PosPage() {
                 <Field label="Ticket de caisse">
                   <div className="flex gap-2">
                     <Input
+                      data-pos-modal-search
                       autoFocus
                       value={creditTicketCode}
                       onChange={(event) => setCreditTicketCode(event.target.value.toUpperCase())}
@@ -4964,6 +4999,7 @@ export function PosPage() {
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
                   <Field label="Numero de commande">
                     <Input
+                      data-pos-modal-search
                       className="h-12"
                       inputMode="numeric"
                       value={deliveryOrderNumber}
@@ -5112,6 +5148,7 @@ export function PosPage() {
             <div className="min-w-0 space-y-3 overflow-y-auto pr-1">
               <Field label="">
                 <Input
+                  data-pos-article-search
                   value={articleSearch}
                   onClick={handleArticleSearchTap}
                   onDoubleClick={() => setArticleKeyboardOpen(true)}
@@ -5194,6 +5231,10 @@ export function PosPage() {
               </button>
             </div>
 
+            <Field label="Recherche vendeur">
+              <Input data-pos-seller-search value={sellerSearch} onChange={(event) => setSellerSearch(event.target.value)} placeholder="Nom du vendeur..." />
+            </Field>
+
             <div className="mt-4 grid max-h-[58vh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
               {filteredSellers.map((seller) => {
                 const checked = selectedSellerNames.includes(seller.fullName);
@@ -5237,7 +5278,7 @@ export function PosPage() {
             <div className="grid max-h-[calc(100vh-10rem)] gap-4 overflow-y-auto pr-1 lg:grid-cols-[1fr_0.95fr]">
               <div className="space-y-3">
                 <Field label="Recherche client">
-                  <Input value={clientSearch} onFocus={() => setClientInputTarget("search")} onChange={(event) => setClientSearch(event.target.value)} placeholder="Nom, telephone ou email..." />
+                  <Input data-pos-client-search value={clientSearch} onFocus={() => setClientInputTarget("search")} onChange={(event) => setClientSearch(event.target.value)} placeholder="Nom, telephone ou email..." />
                 </Field>
                 <button type="button" className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm font-semibold text-white" onClick={() => selectCustomer(null)}>
                   Client comptoir
