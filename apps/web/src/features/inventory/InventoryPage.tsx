@@ -111,7 +111,7 @@ export function InventoryPage() {
     setOverview(bootstrap.overview);
     setForm((current) => ({
       ...current,
-      productId: current.productId || bootstrap.products[0]?.id || "",
+      productId: current.productId || bootstrap.overview[0]?.id || bootstrap.products[0]?.id || "",
       warehouseId: current.warehouseId || user?.defaultWarehouse?.id || bootstrap.warehouses[0]?.id || ""
     }));
     setTransferForm((current) => ({
@@ -230,12 +230,19 @@ export function InventoryPage() {
 
   const adjustmentProducts = useMemo(() => {
     const query = adjustmentSearch.trim().toLowerCase();
-    if (!query) return products;
-    return products.filter((product) =>
+    const source = overview;
+    const rows = !query ? source : source.filter((product) =>
       product.name.toLowerCase().includes(query)
       || String(product.reference ?? "").toLowerCase().includes(query)
+      || product.variants.some((variant) =>
+        String(variant.reference ?? "").toLowerCase().includes(query)
+        || String(variant.label ?? "").toLowerCase().includes(query)
+        || String(variant.color ?? "").toLowerCase().includes(query)
+        || String(variant.size ?? "").toLowerCase().includes(query)
+      )
     );
-  }, [adjustmentSearch, products]);
+    return rows.slice(0, 12);
+  }, [adjustmentSearch, overview]);
 
   const transferProducts = useMemo(() => {
     const query = transferSearch.trim().toLowerCase();
@@ -395,6 +402,24 @@ export function InventoryPage() {
     return 0;
   }
 
+  function selectAdjustmentProduct(product: ProductStockOverview) {
+    setForm((current) => ({
+      ...current,
+      productId: product.id,
+      variantId: ""
+    }));
+    setAdjustmentSearch(product.reference ? `${product.reference} - ${product.name}` : product.name);
+  }
+
+  function openAdjustmentModal() {
+    const initialProduct = selectedAdjustmentProduct ?? overview[0] ?? null;
+    setAdjustmentModalOpen(true);
+    setAdjustmentSearch(initialProduct ? (initialProduct.reference ? `${initialProduct.reference} - ${initialProduct.name}` : initialProduct.name) : "");
+    if (initialProduct && form.productId !== initialProduct.id) {
+      setForm((current) => ({ ...current, productId: initialProduct.id, variantId: "" }));
+    }
+  }
+
   function closeTransferModal() {
     if (saving) return;
     setTransferModalOpen(false);
@@ -483,7 +508,7 @@ export function InventoryPage() {
               Transferer le stock
             </Button>
           ) : null}
-          <Button className="!h-9 !px-4 !text-[13px]" onClick={() => setAdjustmentModalOpen(true)} disabled={!canAdjustStock}>
+          <Button className="!h-9 !px-4 !text-[13px]" onClick={openAdjustmentModal} disabled={!canAdjustStock}>
             <PackagePlus className="mr-2 h-4 w-4" />
             Nouvel ajustement
           </Button>
@@ -802,9 +827,36 @@ export function InventoryPage() {
               <Field label="Article">
                 <div className="space-y-3">
                   <Input placeholder="Rechercher par reference ou article..." value={adjustmentSearch} onChange={(e) => setAdjustmentSearch(e.target.value)} />
-                  <Select value={form.productId} onChange={(e) => setForm((current) => ({ ...current, productId: e.target.value, variantId: "" }))}>
-                    {adjustmentProducts.map((product) => <option key={product.id} value={product.id}>{product.reference ? `${product.reference} - ` : ""}{product.name}</option>)}
-                  </Select>
+                  <div className="max-h-[190px] space-y-2 overflow-auto rounded-[20px] border border-white/10 bg-black/20 p-2">
+                    {adjustmentProducts.map((product) => {
+                      const isSelected = form.productId === product.id;
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => selectAdjustmentProduct(product)}
+                          className={isSelected
+                            ? "flex w-full items-center justify-between gap-3 rounded-[18px] border border-orange-300/40 bg-orange-300/14 px-3 py-2.5 text-left shadow-[0_10px_24px_rgba(255,138,31,.12)]"
+                            : "flex w-full items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-[#120e0c] px-3 py-2.5 text-left transition hover:border-orange-300/30 hover:bg-orange-300/8"}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-white">{product.reference ? `${product.reference} - ` : ""}{product.name}</span>
+                            <span className="mt-0.5 block text-[11px] text-[#bcae9f]">
+                              {product.variants.length ? `${formatNumber(product.variants.length)} variante(s)` : "Article sans variante"}
+                            </span>
+                          </span>
+                          <span className={isSelected ? "rounded-full bg-orange-300 px-2.5 py-1 text-[11px] font-bold text-[#1d1209]" : "rounded-full border border-white/10 px-2.5 py-1 text-[11px] font-semibold text-[#d7c8b8]"}>
+                            {isSelected ? "Selectionne" : "Choisir"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {!adjustmentProducts.length ? (
+                      <div className="rounded-[18px] border border-white/10 bg-black/20 px-3 py-4 text-center text-sm text-[#bcae9f]">
+                        Aucun article trouve pour cette recherche.
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </Field>
               {selectedAdjustmentProduct?.variants.length ? (
