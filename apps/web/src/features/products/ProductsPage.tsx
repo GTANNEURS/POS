@@ -454,16 +454,17 @@ function ProductModal({
 
   const selectedColors = (meta?.colors ?? []).filter((item) => selectedColorIds.includes(item.id));
   const selectedSizes = (meta?.sizes ?? []).filter((item) => selectedSizeIds.includes(item.id));
-  const selectedColorLabel = selectedColors.length ? selectedColors.map((item) => item.name).join(", ") : "Choisir les couleurs";
+  const selectedColorLabel = selectedColors.length ? selectedColors.map((item) => item.reference ? `${item.reference} ${item.name}` : item.name).join(", ") : "Choisir les couleurs";
   const selectedSizeLabel = selectedSizes.length ? selectedSizes.map((item) => item.name).join(", ") : "Choisir les tailles";
-  const groupedVariants = form.variants.reduce<Array<{ color: string; items: Array<{ variant: ProductVariantForm; index: number }> }>>((groups, variant, index) => {
+  const colorReferenceByName = new Map((meta?.colors ?? []).map((color) => [color.name, color.reference]));
+  const groupedVariants = form.variants.reduce<Array<{ color: string; colorReference: string; items: Array<{ variant: ProductVariantForm; index: number }> }>>((groups, variant, index) => {
     const colorKey = variant.color?.trim() || "Sans couleur";
     const existingGroup = groups.find((group) => group.color === colorKey);
     const entry = { variant, index };
     if (existingGroup) {
       existingGroup.items.push(entry);
     } else {
-      groups.push({ color: colorKey, items: [entry] });
+      groups.push({ color: colorKey, colorReference: colorReferenceByName.get(colorKey) ?? "", items: [entry] });
     }
     return groups;
   }, []);
@@ -654,9 +655,12 @@ function ProductModal({
                           {filteredColors.map((color) => (
                             <label key={color.id} className="flex cursor-pointer items-start gap-3 rounded-[14px] px-3 py-2 text-sm text-[#efe3d7] transition hover:bg-white/[0.06]">
                               <input type="checkbox" className="mt-1 h-4 w-4 accent-orange-400" checked={selectedColorIds.includes(color.id)} onChange={() => setSelectedColorIds((current) => toggleSelection(current, color.id))} />
-                              <span className="min-w-0">
-                                <span className="block truncate font-medium text-white">{color.name}</span>
-                                <span className="text-xs text-[#baa999]">{color.type}</span>
+                              <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                                <span className="min-w-0">
+                                  <span className="block truncate font-medium text-white">{color.name}</span>
+                                  <span className="text-xs text-[#baa999]">{color.type}</span>
+                                </span>
+                                <span className="shrink-0 rounded-full border border-orange-300/25 bg-orange-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-100">{color.reference || "-"}</span>
                               </span>
                             </label>
                           ))}
@@ -724,8 +728,13 @@ function ProductModal({
                     <div className="space-y-3">
                       {groupedVariants.map((group) => (
                          <div key={group.color} className="product-variant-group rounded-[16px] border border-white/10 bg-white/[0.03] p-3">
-                            <div className="product-variant-group-head mb-2 flex items-center justify-between gap-3 border-b border-white/8 pb-2">
-                              <div className="product-variant-title text-sm font-semibold text-white">{group.color}</div>
+                            <div className="product-variant-group-head mb-2 flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-2">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                {group.colorReference ? (
+                                  <span className="rounded-full border border-orange-300/25 bg-orange-300/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-orange-100">{group.colorReference}</span>
+                                ) : null}
+                                <div className="product-variant-title text-sm font-semibold text-white">{group.color}</div>
+                              </div>
                             <div className="rounded-full border border-orange-300/20 bg-orange-300/10 px-2.5 py-1 text-[11px] text-orange-100">{formatNumber(group.items.length)} variante(s)</div>
                           </div>
 
@@ -742,7 +751,12 @@ function ProductModal({
                               <div key={`${variant.reference}-${index}`} className="product-variant-row rounded-[12px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.025),rgba(255,255,255,0.012))] px-3 py-2">
                                 <div className="mb-1.5 flex items-center justify-between gap-3 xl:hidden">
                                   <div className="min-w-0">
-                                    <div className="truncate text-[13px] font-semibold text-white">{buildVariantLabel(form.name || "Article", variant.color, variant.size) || `Variante ${index + 1}`}</div>
+                                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                      {colorReferenceByName.get(variant.color) ? (
+                                        <span className="rounded-full border border-orange-300/20 bg-orange-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-100">{colorReferenceByName.get(variant.color)}</span>
+                                      ) : null}
+                                      <div className="truncate text-[13px] font-semibold text-white">{buildVariantLabel(form.name || "Article", variant.color, variant.size) || `Variante ${index + 1}`}</div>
+                                    </div>
                                   </div>
                                   <Button type="button" variant="secondary" className="!h-7 !px-2" onClick={() => removeVariant(index)}>
                                     <Trash2 className="h-4 w-4" />
@@ -1161,7 +1175,7 @@ export function ProductsPage() {
                       <th>Prix vente TTC</th>
                       <th>{scopedWarehouseName ? `Stock ${scopedWarehouseName}` : "Stock global"}</th>
                       <th>Statut</th>
-                      {canEditProducts ? <th className="text-right">Actions</th> : null}
+                      {canEditProducts ? <th className="product-actions-sticky text-right">Actions</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -1203,7 +1217,7 @@ export function ProductsPage() {
                           </Badge>
                         </td>
                         {canEditProducts ? (
-                          <td>
+                          <td className="product-actions-sticky">
                             <div className="flex justify-end gap-2">
                               <Button variant="secondary" className="px-3 py-2 text-sm" onClick={(event) => { event.stopPropagation(); void startEdit(item); }}><Pencil className="h-4 w-4" /></Button>
                               <Button variant="secondary" className="px-3 py-2 text-sm" onClick={(event) => { event.stopPropagation(); void remove(item.id); }}><Trash2 className="h-4 w-4" /></Button>

@@ -623,8 +623,11 @@ export function ProductDetailPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-white">{variant.label}</p>
-                              <p className="mt-1 text-xs text-[#b9aa9b]">
-                                {(variant.color?.trim() || "Sans couleur")} - {(variant.size?.trim() || "Sans taille")}
+                              <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[#b9aa9b]">
+                                {variant.colorReference ? (
+                                  <span className="rounded-full border border-orange-300/20 bg-orange-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-100">{variant.colorReference}</span>
+                                ) : null}
+                                <span>{(variant.color?.trim() || "Sans couleur")} - {(variant.size?.trim() || "Sans taille")}</span>
                               </p>
                             </div>
                             <Badge tone={locationQuantity > 0 ? "success" : locationQuantity < 0 ? "danger" : "danger"}>{formatNumber(locationQuantity)}</Badge>
