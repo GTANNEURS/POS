@@ -1938,25 +1938,32 @@ export function AppShell() {
           <title>${ticket.number}</title>
           <style>
             @page { size: 80mm auto; margin: 4mm; }
+            * { box-sizing: border-box; }
             body {
               margin: 0;
-              font-family: Arial, sans-serif;
+              font-family: Arial, Helvetica, sans-serif;
               background: #fff;
               color: #111;
               width: 72mm;
               font-size: 11px;
+              line-height: 1.28;
+              font-weight: 500;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              text-rendering: geometricPrecision;
             }
             .ticket { width: 100%; }
             .center { text-align: center; }
-            .title { font-size: 16px; font-weight: 700; margin: 2px 0; }
-            .muted { color: #5f5449; font-size: 10px; }
-            .section { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #bca48d; }
+            .title { font-size: 16px; font-weight: 800; margin: 2px 0; }
+            .muted { color: #111; font-size: 10.5px; }
+            .section { margin-top: 8px; padding-top: 8px; border-top: 1.4px dashed #111; }
             table { width: 100%; border-collapse: collapse; }
-            th { text-transform: uppercase; font-size: 8px; letter-spacing: 0.06em; color: #6b5a4d; padding-bottom: 4px; text-align:left; }
+            th { text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.06em; color: #111; padding-bottom: 4px; text-align:left; font-weight: 800; }
             td { vertical-align: top; padding: 4px 0; }
             .totals td { padding: 2px 0; }
-            .strong { font-weight: 700; }
-            .grand-total { font-size: 14px; font-weight: 700; }
+            .strong { font-weight: 800; }
+            .grand-total { font-size: 15px; font-weight: 800; }
+            svg { shape-rendering: crispEdges; }
             .duplicate-badge {
               display: inline-block;
               margin-top: 6px;
@@ -1971,7 +1978,6 @@ export function AppShell() {
           </style>
         </head>
         <body>
-          <div class="ticket">
           <div class="ticket">
             <div class="center">
               ${companyInfo?.logoUrl ? `<div style="margin-bottom:6px;"><img src="${companyInfo.logoUrl}" alt="Logo" style="max-width:52mm;max-height:18mm;object-fit:contain;" /></div>` : ""}
@@ -2015,7 +2021,7 @@ export function AppShell() {
 
             <div class="section center">
               <div style="text-align:left;font-size:9px;margin-bottom:8px;">${renderReceiptTextLines(companyInfo?.cgvTerms?.trim() || "") || renderReceiptTextLines("Aucune condition generale de vente configuree.")}</div>
-              <div style="border-top:1px dashed #bca48d;margin:8px 0 6px;"></div>
+              <div style="border-top:1.4px dashed #111;margin:8px 0 6px;"></div>
               <div style="margin-bottom:8px;">${renderReceiptTextLines(companyInfo?.ticketFooter?.trim() || "")}</div>
               <div style="margin-bottom:4px;">${barcodeSvg}</div>
             </div>
@@ -2027,8 +2033,12 @@ export function AppShell() {
               ${companyInfo?.email ? `<div class="muted">${sanitizeUiText(companyInfo.email)}</div>` : ""}
               ${companyInfo?.website ? `<div class="muted">${sanitizeUiText(companyInfo.website)}</div>` : ""}
             </div>
+          </div>
           <script>
             window.onload = function () {
+              document.body.innerHTML = document.body.innerHTML
+                .replace(/N[^0-9A-Za-z<]{1,18} :/g, "N&deg; :")
+                .replace(/N[^0-9A-Za-z<]{1,18} ([0-9])/g, "N&deg; $1");
               window.print();
               setTimeout(function () { window.close(); }, 250);
             };
@@ -2058,7 +2068,7 @@ export function AppShell() {
     const itemsHtml = ticket.items.length
       ? ticket.items.map((item) => `
           <tr>
-            <td><div style="font-weight:700;">${sanitizeUiText(item.productName)}</div><div style="font-size:10px;color:#6c5c4f;">${sanitizeUiText(item.reference)}</div></td>
+            <td><div style="font-weight:800;">${sanitizeUiText(item.productName)}</div><div style="font-size:10.5px;color:#111;">${sanitizeUiText(item.reference)}</div></td>
             <td style="text-align:center;">${item.quantity}</td>
             <td style="text-align:right;">${formatMad(item.lineTotal)}</td>
           </tr>
@@ -2085,35 +2095,43 @@ export function AppShell() {
           <title>${ticket.number}</title>
           <style>
             @page { size: 80mm auto; margin: 4mm; }
+            * { box-sizing: border-box; }
             body {
               margin: 0;
-              font-family: Arial, sans-serif;
+              font-family: Arial, Helvetica, sans-serif;
               background: #fff;
               color: #111;
               width: 72mm;
               font-size: 11px;
+              line-height: 1.28;
+              font-weight: 500;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              text-rendering: geometricPrecision;
             }
             .ticket { width: 100%; }
             .center { text-align: center; }
-            .title { font-size: 16px; font-weight: 700; margin: 2px 0; }
-            .muted { color: #5f5449; font-size: 10px; }
-            .section { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #bca48d; }
+            .title { font-size: 16px; font-weight: 800; margin: 2px 0; }
+            .muted { color: #111; font-size: 10.5px; }
+            .section { margin-top: 8px; padding-top: 8px; border-top: 1.4px dashed #111; }
             table { width: 100%; border-collapse: collapse; }
-            th { text-transform: uppercase; font-size: 8px; letter-spacing: 0.06em; color: #6b5a4d; padding-bottom: 4px; text-align:left; }
+            th { text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.06em; color: #111; padding-bottom: 4px; text-align:left; font-weight: 800; }
             td { vertical-align: top; padding: 4px 0; }
             .banner {
               border: 1px solid #111;
               padding: 4px 8px;
               display: inline-block;
               font-size: 12px;
-              font-weight: 700;
+              font-weight: 800;
               letter-spacing: 0.18em;
               margin-bottom: 6px;
             }
-            .strong { font-weight: 700; }
-            .grand-total { font-size: 14px; font-weight: 700; }
+            .strong { font-weight: 800; }
+            .grand-total { font-size: 15px; font-weight: 800; }
+            svg { shape-rendering: crispEdges; }
           </style>
         </head>
+        <body>
           <div class="ticket">
             <div class="center">
               ${companyInfo?.logoUrl ? `<div style="margin-bottom:6px;"><img src="${companyInfo.logoUrl}" alt="Logo" style="max-width:52mm;max-height:18mm;object-fit:contain;" /></div>` : ""}
@@ -2153,7 +2171,7 @@ export function AppShell() {
 
             <div class="section center">
               <div style="text-align:left;font-size:9px;margin-bottom:8px;">${renderReceiptTextLines(companyInfo?.cgvTerms?.trim() || "") || renderReceiptTextLines("Aucune condition generale de vente configuree.")}</div>
-              <div style="border-top:1px dashed #bca48d;margin:8px 0 6px;"></div>
+              <div style="border-top:1.4px dashed #111;margin:8px 0 6px;"></div>
               <div style="margin-bottom:8px;">${renderReceiptTextLines(companyInfo?.ticketFooter?.trim() || "")}</div>
               <div style="margin-bottom:4px;">${barcodeSvg}</div>
             </div>
@@ -2165,11 +2183,12 @@ export function AppShell() {
               ${companyInfo?.email ? `<div class="muted">${sanitizeUiText(companyInfo.email)}</div>` : ""}
               ${companyInfo?.website ? `<div class="muted">${sanitizeUiText(companyInfo.website)}</div>` : ""}
             </div>
-              ${companyInfo?.website ? `<div class="muted">${sanitizeUiText(companyInfo.website)}</div>` : ""}
-            </div>
           </div>
           <script>
             window.onload = function () {
+              document.body.innerHTML = document.body.innerHTML
+                .replace(/N[^0-9A-Za-z<]{1,18} :/g, "N&deg; :")
+                .replace(/N[^0-9A-Za-z<]{1,18} ([0-9])/g, "N&deg; $1");
               window.print();
               setTimeout(function () { window.close(); }, 250);
             };

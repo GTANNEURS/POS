@@ -571,29 +571,10 @@ export function PosPage() {
   const globalScannerBufferRef = useRef("");
   const globalScannerLastKeyAtRef = useRef(0);
   const globalScannerResetTimerRef = useRef<number | null>(null);
+  const posBootstrapRef = useRef<PosBootstrapPayload | null>(null);
 
-  async function load(query = "", options: { showLoading?: boolean } = { showLoading: true }) {
-    if (options.showLoading !== false) setLoading(true);
-    let productList: Product[];
-    let bootstrap: PosBootstrapPayload;
-    const catalogParams = new URLSearchParams();
-    if (query) catalogParams.set("query", query);
-    const catalogWarehouseId = form.warehouseId || user?.defaultWarehouse?.id || "";
-    if (catalogWarehouseId) catalogParams.set("warehouseId", catalogWarehouseId);
-    const catalogUrl = `/pos/catalog${catalogParams.toString() ? `?${catalogParams.toString()}` : ""}`;
-    try {
-      [productList, bootstrap] = await Promise.all([
-        api<Product[]>(catalogUrl),
-        api<PosBootstrapPayload>("/pos/bootstrap")
-      ]);
-      rememberPosSnapshot({ productList, bootstrap });
-    } catch (error) {
-      const cached = readPosSnapshot<{ productList: Product[]; bootstrap: PosBootstrapPayload }>();
-      if (!cached || !isNetworkError(error)) throw error;
-      productList = cached.productList;
-      bootstrap = cached.bootstrap;
-      setMessage("Mode hors ligne: catalogue caisse charge depuis cet ordinateur.");
-    }
+  function hydratePosState(productList: Product[], bootstrap: PosBootstrapPayload) {
+    posBootstrapRef.current = bootstrap;
     setCatalog(productList);
     setCustomers(bootstrap.customers);
     setWarehouses(bootstrap.warehouses);
@@ -609,8 +590,38 @@ export function PosPage() {
       const nextRegisterId = current.registerId || bootstrap.registers.find((register) => register.warehouseId === nextWarehouseId)?.id || bootstrap.registers[0]?.id || "";
       return { ...current, warehouseId: nextWarehouseId, registerId: nextRegisterId };
     });
-    if (options.showLoading !== false) setLoading(false);
-    return productList;
+  }
+
+  async function load(query = "", options: { showLoading?: boolean } = { showLoading: true }) {
+    const shouldShowLoading = options.showLoading !== false;
+    if (shouldShowLoading) setLoading(true);
+    const catalogParams = new URLSearchParams();
+    if (query) catalogParams.set("query", query);
+    const catalogWarehouseId = form.warehouseId || user?.defaultWarehouse?.id || "";
+    if (catalogWarehouseId) catalogParams.set("warehouseId", catalogWarehouseId);
+    const catalogUrl = `/pos/catalog${catalogParams.toString() ? `?${catalogParams.toString()}` : ""}`;
+    try {
+      const shouldRefreshBootstrap = shouldShowLoading || !posBootstrapRef.current;
+      const [productList, bootstrap] = await Promise.all([
+        api<Product[]>(catalogUrl),
+        shouldRefreshBootstrap ? api<PosBootstrapPayload>("/pos/bootstrap") : Promise.resolve(posBootstrapRef.current as PosBootstrapPayload)
+      ]);
+      hydratePosState(productList, bootstrap);
+      rememberPosSnapshot({ productList, bootstrap });
+      return productList;
+    } catch (error) {
+      const cached = readPosSnapshot<{ productList: Product[]; bootstrap: PosBootstrapPayload }>();
+      if (cached && isNetworkError(error)) {
+        hydratePosState(cached.productList, cached.bootstrap);
+        setMessage("Mode hors ligne: catalogue caisse charge depuis cet ordinateur.");
+        return cached.productList;
+      }
+      setMessage(error instanceof Error ? error.message : "Chargement caisse impossible.");
+      setCatalog([]);
+      return [];
+    } finally {
+      if (shouldShowLoading) setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -2488,14 +2499,14 @@ export function PosPage() {
                   ? `<div style="font-size:10px;font-weight:600;line-height:1.15;">${orderParts.orderType} Cmd NÃ¯Â¿Â½ : ${orderParts.orderNumber || "-"}</div>`
                   : `
                     <div style="font-size:10px;font-weight:600;line-height:1.15;">Acompte commande NÃ¯Â¿Â½ ${orderParts.orderNumber || "-"}</div>
-                    <div style="font-size:8px;color:#6c5c4f;margin-top:2px;line-height:1.1;">( Reste a payer : ${formatCurrency(remainingAmount)} )</div>
+                    <div style="font-size:8.5px;color:#222;margin-top:2px;line-height:1.1;">( Reste a payer : ${formatCurrency(remainingAmount)} )</div>
                   `}
               `
               : `
-                 <div style="font-size:${receiptItemFontSize}px;font-weight:600;line-height:1.15;">${line.name}</div>
-                ${meta ? `<div style="font-size:8px;color:#6c5c4f;margin-top:2px;line-height:1.1;">${meta}</div>` : ""}
+                 <div style="font-size:${receiptItemFontSize}px;font-weight:700;line-height:1.15;">${line.name}</div>
+                ${meta ? `<div style="font-size:8.5px;color:#222;margin-top:2px;line-height:1.1;">${meta}</div>` : ""}
               `}
-            ${line.discountAmount > 0 ? `<div style="font-size:9px;color:#a05a36;margin-top:2px;line-height:1.15;">Remise ${formatCurrency(line.discountAmount)}</div>` : ""}
+            ${line.discountAmount > 0 ? `<div style="font-size:9px;color:#111;margin-top:2px;line-height:1.15;">Remise ${formatCurrency(line.discountAmount)}</div>` : ""}
           </td>
           <td style="text-align:center;white-space:nowrap;font-size:${receiptItemFontSize}px;">${formatNumber(line.quantity)}</td>
           <td style="text-align:right;white-space:nowrap;font-size:${receiptItemFontSize}px;">${formatCurrency(line.lineTotal)}</td>
@@ -2504,30 +2515,39 @@ export function PosPage() {
     }).join("");
 
     popup.document.write(`
-      <html>
+      <!doctype html>
+      <html lang="fr">
         <head>
+          <meta charset="utf-8" />
           <title>${sale.number}</title>
           <style>
             @page { size: 80mm auto; margin: 4mm; }
+            * { box-sizing: border-box; }
             body {
               margin: 0;
-              font-family: ${receiptFontFamily}, Arial, sans-serif;
+              font-family: ${receiptFontFamily}, Arial, Helvetica, sans-serif;
               background: #fff;
               color: #111;
               width: 72mm;
               font-size: ${receiptBaseFontSize}px;
+              line-height: 1.28;
+              font-weight: 500;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              text-rendering: geometricPrecision;
             }
             .ticket { width: 100%; }
             .center { text-align: center; }
-            .title { font-size: ${receiptTitleFontSize}px; font-weight: 700; margin: 2px 0; }
-            .muted { color: #5f5449; font-size: 10px; }
-            .section { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #bca48d; }
+            .title { font-size: ${receiptTitleFontSize}px; font-weight: 800; margin: 2px 0; }
+            .muted { color: #111; font-size: 10.5px; }
+            .section { margin-top: 8px; padding-top: 8px; border-top: 1.4px dashed #111; }
             table { width: 100%; border-collapse: collapse; }
-            th { text-transform: uppercase; font-size: 8px; letter-spacing: 0.06em; color: #6b5a4d; padding-bottom: 4px; }
+            th { text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.06em; color: #111; padding-bottom: 4px; font-weight: 800; }
             td { vertical-align: top; padding: 4px 0; }
             .totals td { padding: 2px 0; }
-            .strong { font-weight: 700; }
-            .grand-total { font-size: 14px; font-weight: 700; }
+            .strong { font-weight: 800; }
+            .grand-total { font-size: 15px; font-weight: 800; }
+            svg { shape-rendering: crispEdges; }
           </style>
         </head>
         <body>
@@ -2579,7 +2599,7 @@ export function PosPage() {
 
             <div class="section center">
               ${showBlock("showCgv") ? `<div style="text-align:left;font-size:9px;margin-bottom:8px;">${cgvHtml || renderReceiptTextLines("Aucune condition generale de vente configuree.")}</div>` : ""}
-              ${(showBlock("showCgv") || showBlock("showFooter")) ? `<div style="border-top:1px dashed #bca48d;margin:8px 0 6px;"></div>` : ""}
+              ${(showBlock("showCgv") || showBlock("showFooter")) ? `<div style="border-top:1.4px dashed #111;margin:8px 0 6px;"></div>` : ""}
               ${showBlock("showFooter") ? `<div style="margin-bottom:8px;">${footerHtml}</div>` : ""}
               ${showBlock("showBarcode") ? `<div style="margin-bottom:4px;">${barcodeSvg}</div>` : ""}
             </div>
@@ -2594,6 +2614,11 @@ export function PosPage() {
           </div>
           <script>
             window.onload = function () {
+              document.body.innerHTML = document.body.innerHTML
+                .replace(/N[^0-9A-Za-z<]{1,18} :/g, "N&deg; :")
+                .replace(/N[^0-9A-Za-z<]{1,18} ([0-9])/g, "N&deg; $1");
+              var receiptTitle = document.querySelector(".ticket > .section .center.strong");
+              if (receiptTitle) receiptTitle.innerHTML = "Ticket N&deg; : ${sale.number}";
               window.print();
               setTimeout(function () { window.close(); }, 250);
             };

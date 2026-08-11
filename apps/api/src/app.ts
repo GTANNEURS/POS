@@ -23,6 +23,7 @@ import { settingsRouter } from "./modules/settings/settings.routes.js";
 export function createApp() {
   const app = express();
 
+  app.disable("x-powered-by");
   app.use(
     cors({
       origin(origin, callback) {

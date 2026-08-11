@@ -316,7 +316,15 @@ export function ProductDetailPage() {
           <style>
             @page { size: 50mm 30mm; margin: 0; }
             * { box-sizing: border-box; }
-            html, body { margin: 0; padding: 0; background: #ffffff; font-family: Arial, sans-serif; }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              font-family: Arial, Helvetica, "Liberation Sans", sans-serif;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              text-rendering: geometricPrecision;
+            }
             body { display: block; }
             .label {
               width: 50mm;
@@ -331,15 +339,17 @@ export function ProductDetailPage() {
             }
             .label:last-child { page-break-after: auto; }
             .category {
-              font-size: 7.3pt;
+              font-size: 7.6pt;
               line-height: 1.05;
-              font-weight: 700;
+              font-weight: 800;
+              letter-spacing: 0.01em;
               color: #111111;
               min-height: 3.4mm;
             }
             .subtitle {
-              font-size: 6.1pt;
+              font-size: 6.3pt;
               line-height: 1.05;
+              font-weight: 600;
               color: #111111;
               min-height: 2.6mm;
             }
@@ -350,16 +360,17 @@ export function ProductDetailPage() {
               gap: 2mm;
             }
             .reference {
-              font-size: 6.7pt;
+              font-size: 7pt;
               line-height: 1;
-              font-weight: 700;
+              font-weight: 800;
               letter-spacing: 0.03em;
               color: #111111;
             }
             .price {
-              font-size: 6.7pt;
+              font-size: 8.2pt;
               line-height: 1;
-              font-weight: 700;
+              font-weight: 800;
+              letter-spacing: -0.01em;
               color: #111111;
               white-space: nowrap;
               text-align: right;
@@ -376,10 +387,12 @@ export function ProductDetailPage() {
               width: 100%;
               height: 100%;
               display: block;
+              shape-rendering: crispEdges;
             }
             .barcode-text {
+              font-family: "Courier New", monospace;
               text-align: center;
-              font-size: 7pt;
+              font-size: 7.2pt;
               line-height: 1;
               font-weight: 700;
               letter-spacing: 0.08em;
@@ -723,7 +736,7 @@ export function ProductDetailPage() {
                   <p className="mt-1 truncate text-[9px] text-[#5c5147]">{selectedLabelOption.title}</p>
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p className="text-[10px] font-semibold tracking-[0.06em] text-[#18120e]">{selectedLabelOption.reference}</p>
-                    <p className="whitespace-nowrap text-[10px] font-semibold text-[#18120e]">{selectedLabelOption.priceLabel}</p>
+                    <p className="whitespace-nowrap text-[12px] font-bold tracking-tight text-[#18120e]">{selectedLabelOption.priceLabel}</p>
                   </div>
                   <div className="mt-2 h-[58px]" dangerouslySetInnerHTML={{ __html: labelPreviewSvg }} />
                   <p className="mt-1 text-center text-[11px] font-semibold tracking-[0.14em] text-[#18120e]">{normalizeCode39Value(selectedLabelOption.barcode)}</p>

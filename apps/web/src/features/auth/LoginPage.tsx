@@ -21,9 +21,9 @@ export function LoginPage() {
   const { login, logout } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<LoginMode>("admin");
-  const [email, setEmail] = useState("admin@gdt.local");
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("Admin123!");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [cashierScannedCode, setCashierScannedCode] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -237,14 +237,14 @@ export function LoginPage() {
                     <span className="text-sm font-medium text-[#eadccf]">Adresse mail</span>
                     <div className="relative">
                       <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#bba995]" />
-                      <Input className="pl-11" value={email} onChange={(event) => setEmail(event.target.value)} />
+                      <Input className="pl-11" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} />
                     </div>
                   </label>
                   <label className="block space-y-2">
                     <span className="text-sm font-medium text-[#eadccf]">Mot de passe</span>
                     <div className="relative">
                       <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#bba995]" />
-                      <Input className="pl-11" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+                      <Input className="pl-11" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
                     </div>
                   </label>
                 </>
@@ -258,6 +258,7 @@ export function LoginPage() {
                       <UserRound className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#bba995]" />
                       <Input
                         className="pl-11"
+                        autoComplete="username"
                         value={username}
                         onChange={(event) => {
                           const parsed = normalizeScanValue(event.target.value);
@@ -276,7 +277,7 @@ export function LoginPage() {
                     <span className="text-sm font-medium text-[#eadccf]">Mot de passe</span>
                     <div className="relative">
                       <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#bba995]" />
-                      <Input className="pl-11" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+                      <Input className="pl-11" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
                     </div>
                   </label>
                 </>

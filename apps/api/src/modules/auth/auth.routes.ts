@@ -1,10 +1,10 @@
-﻿import { Router } from "express";
+﻿import { Router, type Request } from "express";
 import jwt, { type Secret, type SignOptions } from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
 import { env } from "../../config/env.js";
 import { asyncHandler, AppError, ok } from "../../common/http.js";
-import { issueAuthTokens, serializeUser, verifyPassword } from "../../common/auth.js";
+import { getUserAccess, issueAuthTokens, serializeUser, verifyPassword } from "../../common/auth.js";
 import { writeAuditLog } from "../../common/audit.js";
 import {
   buildAccessMode,
@@ -24,10 +24,60 @@ const loginSchema = z.union([
 ]);
 export const authRouter = Router();
 
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_RATE_LIMIT_BLOCK_MS = 10 * 60 * 1000;
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 8;
+const loginAttempts = new Map<string, { count: number; firstAt: number; blockedUntil?: number }>();
+
+function loginAttemptKey(req: Request) {
+  const body = req.body as Record<string, unknown>;
+  const identifier = String(body.email ?? body.username ?? body.code ?? "anonymous")
+    .trim()
+    .toLowerCase()
+    .slice(0, 96);
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  return `${ip}:${identifier}`;
+}
+
+function enforceLoginRateLimit(req: Request) {
+  const key = loginAttemptKey(req);
+  const now = Date.now();
+  const attempt = loginAttempts.get(key);
+  if (!attempt) return;
+  if (attempt.blockedUntil && attempt.blockedUntil > now) {
+    throw new AppError("Trop de tentatives. Reessaie dans quelques minutes.", 429);
+  }
+  if (now - attempt.firstAt > LOGIN_RATE_LIMIT_WINDOW_MS) {
+    loginAttempts.delete(key);
+  }
+}
+
+function recordFailedLogin(req: Request) {
+  const key = loginAttemptKey(req);
+  const now = Date.now();
+  const current = loginAttempts.get(key);
+  const next = current && now - current.firstAt <= LOGIN_RATE_LIMIT_WINDOW_MS
+    ? { ...current, count: current.count + 1 }
+    : { count: 1, firstAt: now };
+  if (next.count >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS) {
+    next.blockedUntil = now + LOGIN_RATE_LIMIT_BLOCK_MS;
+  }
+  loginAttempts.set(key, next);
+}
+
+function clearLoginAttempts(req: Request) {
+  loginAttempts.delete(loginAttemptKey(req));
+}
+
+function rejectLogin(req: Request, message = "Identifiants invalides."): never {
+  recordFailedLogin(req);
+  throw new AppError(message, 401);
+}
+
 function buildRefreshCookieOptions() {
   return {
     httpOnly: true as const,
-    sameSite: "lax" as const,
+    sameSite: "strict" as const,
     secure: env.secureCookies,
     maxAge: env.refreshTtlDays * 24 * 60 * 60 * 1000,
     path: "/api/auth",
@@ -43,12 +93,13 @@ const changeCashierCodeSchema = z.object({
 
 authRouter.post("/login", asyncHandler(async (req, res) => {
   const payload = loginSchema.parse(req.body);
+  enforceLoginRateLimit(req);
   let user = null as Awaited<ReturnType<typeof prisma.user.findUnique>> | null;
 
   if (payload.loginType === "admin") {
     user = await prisma.user.findUnique({ where: { email: payload.email } });
     if (!user || !user.isActive || !(await verifyPassword(payload.password, user.passwordHash))) {
-      throw new AppError("Identifiants invalides.", 401);
+      rejectLogin(req);
     }
   }
 
@@ -70,7 +121,7 @@ authRouter.post("/login", asyncHandler(async (req, res) => {
       return profileUsername === username;
     }) ?? null;
     if (!user || !(await verifyPassword(payload.password, user.passwordHash))) {
-      throw new AppError("Identifiants invalides.", 401);
+      rejectLogin(req);
     }
   }
 
@@ -91,15 +142,22 @@ authRouter.post("/login", asyncHandler(async (req, res) => {
       return profileCode === code;
     }) ?? null;
     if (!user) {
-      throw new AppError("Code confidentiel invalide.", 401);
+      rejectLogin(req, "Code confidentiel invalide.");
     }
   }
 
   if (!user) {
-    throw new AppError("Identifiants invalides.", 401);
+    rejectLogin(req);
   }
+
+  const access = await getUserAccess(user.id);
+  if (payload.loginType === "admin" && !access.roles.includes("admin")) {
+    rejectLogin(req);
+  }
+
   const { accessToken, refreshToken, user: profile } = await issueAuthTokens(user.id);
   res.cookie("refreshToken", refreshToken, buildRefreshCookieOptions());
+  clearLoginAttempts(req);
   await writeAuditLog({ userId: user.id, action: "auth.login", entityType: "user", entityId: user.id });
   return ok(res, { accessToken, user: profile }, "Connexion réussie.");
 }));
