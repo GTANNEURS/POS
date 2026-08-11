@@ -3764,7 +3764,7 @@ posRouter.post("/checkout", requirePermissions("pos_use"), asyncHandler(async (r
     await saveStockBalances(tx, balances);
     await saveVariantStockBalances(tx, variantBalances);
     return createdSale;
-  });
+  }, { maxWait: 10_000, timeout: 30_000 });
 
   const legacyOrdersToFinalize = Array.from(new Set(
     payload.items
