@@ -105,6 +105,10 @@ function buildVariantLabelReference(productReference: string, variantReference?:
   return suffix ? `${productRef}-${suffix}` : productRef;
 }
 
+function formatVariantSelectReference(reference: string) {
+  return String(reference ?? "").trim().replace(/\s*-\s*/g, " - ");
+}
+
 function isCentralWarehouseName(value?: string | null) {
   return cleanWarehouseName(value).trim().toLowerCase() === "dépôt central";
 }
@@ -689,7 +693,7 @@ export function ProductDetailPage() {
                 <Select value={selectedLabelId} onChange={(event) => setSelectedLabelId(event.target.value)}>
                   {labelOptions.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {option.title} - {option.reference}
+                      {formatVariantSelectReference(option.reference)} {option.title}
                     </option>
                   ))}
                 </Select>
