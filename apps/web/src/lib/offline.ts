@@ -51,6 +51,88 @@ type CachedCashier = {
   pinHash: string;
   cachedAt: string;
 };
+type PosSnapshotLike = {
+  productList?: Array<Record<string, unknown>>;
+  bootstrap?: {
+    customers?: Array<Record<string, unknown>>;
+    warehouses?: unknown[];
+    sellers?: unknown[];
+    registers?: unknown[];
+    transporters?: unknown[];
+    currencies?: unknown[];
+    paymentMethods?: unknown[];
+    company?: Record<string, unknown> | null;
+  };
+};
+
+function trySetLocalStorage(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    try {
+      localStorage.removeItem(key);
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function compactText(value: unknown, maxLength: number) {
+  if (typeof value !== "string") return value;
+  return value.length > maxLength ? value.slice(0, maxLength) : value;
+}
+
+function compactPosSnapshot(snapshot: unknown, aggressive = false) {
+  const source = snapshot as PosSnapshotLike;
+  if (!source || typeof source !== "object" || !Array.isArray(source.productList) || !source.bootstrap) {
+    return snapshot;
+  }
+
+  const productLimit = aggressive ? 80 : 120;
+  const customerLimit = aggressive ? 120 : 500;
+  const productList = source.productList.slice(0, productLimit).map((product) => ({
+    id: product.id,
+    productId: product.productId,
+    variantId: product.variantId ?? null,
+    name: product.name,
+    reference: product.reference,
+    barcode: product.barcode ?? null,
+    salePriceTtc: product.salePriceTtc,
+    stockOnHand: product.stockOnHand,
+    color: product.color ?? null,
+    size: product.size ?? null,
+    imageUrl: aggressive ? null : (typeof product.imageUrl === "string" && product.imageUrl.length < 280 ? product.imageUrl : null)
+  }));
+  const bootstrap = source.bootstrap;
+  const company = bootstrap.company ? {
+    ...bootstrap.company,
+    logoUrl: compactText(bootstrap.company.logoUrl, 300),
+    cgvTerms: compactText(bootstrap.company.cgvTerms, aggressive ? 1200 : 4000),
+    ticketFooter: compactText(bootstrap.company.ticketFooter, aggressive ? 600 : 2000)
+  } : null;
+
+  return {
+    productList,
+    bootstrap: {
+      customers: (bootstrap.customers ?? []).slice(0, customerLimit).map((customer) => ({
+        id: customer.id,
+        fullName: customer.fullName,
+        phone: customer.phone ?? null,
+        email: customer.email ?? null
+      })),
+      warehouses: bootstrap.warehouses ?? [],
+      sellers: bootstrap.sellers ?? [],
+      registers: bootstrap.registers ?? [],
+      transporters: bootstrap.transporters ?? [],
+      currencies: bootstrap.currencies ?? [],
+      paymentMethods: bootstrap.paymentMethods ?? [],
+      company
+    }
+  };
+}
 
 function readQueue(): OfflineQueueItem[] {
   try {
@@ -120,7 +202,12 @@ export async function loginOfflineCashier(code: string) {
 }
 
 export function rememberPosSnapshot(snapshot: unknown) {
-  localStorage.setItem(OFFLINE_POS_SNAPSHOT_KEY, JSON.stringify({ snapshot, cachedAt: new Date().toISOString() }));
+  const cachedAt = new Date().toISOString();
+  const compactSnapshot = compactPosSnapshot(snapshot);
+  if (trySetLocalStorage(OFFLINE_POS_SNAPSHOT_KEY, JSON.stringify({ snapshot: compactSnapshot, cachedAt }))) return;
+
+  const aggressiveSnapshot = compactPosSnapshot(snapshot, true);
+  trySetLocalStorage(OFFLINE_POS_SNAPSHOT_KEY, JSON.stringify({ snapshot: aggressiveSnapshot, cachedAt }));
 }
 
 export function readPosSnapshot<T>() {

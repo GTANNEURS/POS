@@ -595,6 +595,15 @@ export function PosPage() {
   async function load(query = "", options: { showLoading?: boolean } = { showLoading: true }) {
     const shouldShowLoading = options.showLoading !== false;
     if (shouldShowLoading) setLoading(true);
+    let displayedCachedSnapshot = false;
+    if (shouldShowLoading && !query) {
+      const cached = readPosSnapshot<{ productList: Product[]; bootstrap: PosBootstrapPayload }>();
+      if (cached) {
+        hydratePosState(cached.productList, cached.bootstrap);
+        setLoading(false);
+        displayedCachedSnapshot = true;
+      }
+    }
     const catalogParams = new URLSearchParams();
     if (query) catalogParams.set("query", query);
     const catalogWarehouseId = form.warehouseId || user?.defaultWarehouse?.id || "";
@@ -607,7 +616,10 @@ export function PosPage() {
         shouldRefreshBootstrap ? api<PosBootstrapPayload>("/pos/bootstrap") : Promise.resolve(posBootstrapRef.current as PosBootstrapPayload)
       ]);
       hydratePosState(productList, bootstrap);
-      rememberPosSnapshot({ productList, bootstrap });
+      if (displayedCachedSnapshot) setMessage(null);
+      if (!query) {
+        window.setTimeout(() => rememberPosSnapshot({ productList, bootstrap }), 0);
+      }
       return productList;
     } catch (error) {
       const cached = readPosSnapshot<{ productList: Product[]; bootstrap: PosBootstrapPayload }>();
@@ -620,7 +632,7 @@ export function PosPage() {
       setCatalog([]);
       return [];
     } finally {
-      if (shouldShowLoading) setLoading(false);
+      if (shouldShowLoading && !displayedCachedSnapshot) setLoading(false);
     }
   }
 
