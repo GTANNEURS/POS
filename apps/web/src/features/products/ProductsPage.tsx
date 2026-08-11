@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent,
 import { Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
-import { cleanDisplayText, formatCurrency, formatNumber } from "../../lib/format";
+import { cleanDisplayText, cleanWarehouseName, formatCurrency, formatNumber } from "../../lib/format";
 import { Badge, Button, EmptyState, Field, Input, LoadingBlock, PageHeader, SectionCard, Select, Textarea } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
@@ -589,7 +589,7 @@ function ProductModal({
                     <Field label="Depot / magasin">
                       <Select value={form.warehouseId} onChange={(event) => onChange("warehouseId", event.target.value)}>
                         <option value="">Choisir</option>
-                        {meta?.warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                        {meta?.warehouses.map((item) => <option key={item.id} value={item.id}>{cleanWarehouseName(item.name)}</option>)}
                       </Select>
                     </Field>
                     <Field label="Stock minimum">
@@ -859,7 +859,7 @@ export function ProductsPage() {
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canEditProducts = user?.roles.includes("admin") ?? false;
-  const scopedWarehouseName = user?.defaultWarehouse?.name ?? null;
+  const scopedWarehouseName = cleanWarehouseName(user?.defaultWarehouse?.name ?? null) || null;
 
   async function load(searchValue = "") {
     setLoading(true);
@@ -1173,7 +1173,7 @@ export function ProductsPage() {
                       <th>Article</th>
                       <th>Reference</th>
                       <th>Prix vente TTC</th>
-                      <th>{scopedWarehouseName ? `Stock ${scopedWarehouseName}` : "Stock global"}</th>
+                      <th>Stock Globale</th>
                       <th>Statut</th>
                       {canEditProducts ? <th className="product-actions-sticky text-center">Actions</th> : null}
                     </tr>

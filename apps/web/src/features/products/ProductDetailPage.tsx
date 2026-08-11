@@ -105,6 +105,10 @@ function buildVariantLabelReference(productReference: string, variantReference?:
   return suffix ? `${productRef}-${suffix}` : productRef;
 }
 
+function isCentralWarehouseName(value?: string | null) {
+  return cleanWarehouseName(value).trim().toLowerCase() === "dépôt central";
+}
+
 export function ProductDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -142,18 +146,28 @@ export function ProductDetailPage() {
   const scopedWarehouseName = !isAdminSession ? cleanWarehouseName(user?.defaultWarehouse?.name ?? item?.warehouse?.name ?? null) : null;
   const orderedLocationBalances = useMemo(() => {
     if (!item) return [];
+    if (isAdminSession) {
+      const central = item.locationBalances.find((location) => isCentralWarehouseName(location.warehouseName));
+      const others = item.locationBalances.filter((location) => !isCentralWarehouseName(location.warehouseName));
+      return central ? [central, ...others] : item.locationBalances;
+    }
     if (!user?.defaultWarehouse?.id) return item.locationBalances;
     const current = item.locationBalances.find((location) => location.warehouseId === user.defaultWarehouse?.id);
     const others = item.locationBalances.filter((location) => location.warehouseId !== user.defaultWarehouse?.id);
     return current ? [current, ...others] : item.locationBalances;
-  }, [item, user?.defaultWarehouse?.id]);
+  }, [isAdminSession, item, user?.defaultWarehouse?.id]);
   const variantMatrixWarehouses = useMemo(() => {
     if (!item) return [];
+    if (isAdminSession) {
+      const central = item.locationBalances.find((location) => isCentralWarehouseName(location.warehouseName));
+      const others = item.locationBalances.filter((location) => !isCentralWarehouseName(location.warehouseName));
+      return central ? [central, ...others] : item.locationBalances;
+    }
     if (!user?.defaultWarehouse?.id) return item.locationBalances;
     const current = item.locationBalances.find((location) => location.warehouseId === user.defaultWarehouse?.id);
     const others = item.locationBalances.filter((location) => location.warehouseId !== user.defaultWarehouse?.id);
     return current ? [current, ...others] : item.locationBalances;
-  }, [item, user?.defaultWarehouse?.id]);
+  }, [isAdminSession, item, user?.defaultWarehouse?.id]);
   const variantMatrixColors = useMemo(() => {
     if (!item) return [];
     const colorMap = new Map<string, { name: string; reference?: string | null }>();
@@ -190,36 +204,20 @@ export function ProductDetailPage() {
   const labelOptions = useMemo<LabelOption[]>(() => {
     if (!item) return [];
 
-    const options: LabelOption[] = [];
-    const articleBarcode = String(item.barcode ?? "").trim();
-    if (articleBarcode) {
-      options.push({
-        id: `product:${item.id}`,
-        title: item.name,
+    return item.variants.flatMap((variant) => {
+      const variantBarcode = String(variant.barcode ?? "").trim();
+      if (!variantBarcode) return [];
+      const variantLine = [variant.color?.trim(), variant.size?.trim()].filter(Boolean).join(" - ") || variant.label;
+      return [{
+        id: `variant:${variant.id}`,
+        title: variantLine,
         categoryLabel: item.category?.name ?? "Sans categorie",
         subtitle: "",
-        reference: buildShortLabelReference(item.reference),
-        barcode: articleBarcode,
-        priceLabel: formatCurrency(Number(item.salePriceTtc))
-      });
-    }
-
-    item.variants.forEach((variant) => {
-      const variantBarcode = String(variant.barcode ?? "").trim();
-      if (!variantBarcode) return;
-      const variantLine = [variant.color?.trim(), variant.size?.trim()].filter(Boolean).join(" - ") || variant.label;
-      options.push({
-        id: `variant:${variant.id}`,
-        title: item.name,
-        categoryLabel: item.category?.name ?? "Sans categorie",
-        subtitle: variantLine,
         reference: buildVariantLabelReference(item.reference, variant.reference),
         barcode: variantBarcode,
         priceLabel: formatCurrency(Number(item.salePriceTtc))
-      });
+      }];
     });
-
-    return options;
   }, [item]);
   const selectedLabelOption = useMemo(
     () => labelOptions.find((option) => option.id === selectedLabelId) ?? labelOptions[0] ?? null,
@@ -240,9 +238,14 @@ export function ProductDetailPage() {
       if (current && variantMatrixWarehouses.some((location) => location.warehouseId === current)) {
         return current;
       }
+      if (isAdminSession) {
+        return variantMatrixWarehouses.find((location) => isCentralWarehouseName(location.warehouseName))?.warehouseId
+          ?? variantMatrixWarehouses[0]?.warehouseId
+          ?? null;
+      }
       return user?.defaultWarehouse?.id ?? variantMatrixWarehouses[0]?.warehouseId ?? null;
     });
-  }, [user?.defaultWarehouse?.id, variantMatrixWarehouses]);
+  }, [isAdminSession, user?.defaultWarehouse?.id, variantMatrixWarehouses]);
 
   useEffect(() => {
     if (!labelOptions.length) {
@@ -268,6 +271,12 @@ export function ProductDetailPage() {
       );
   }
 
+  function isCurrentStockLocation(location: { warehouseId: string; warehouseName?: string | null }) {
+    return isAdminSession
+      ? isCentralWarehouseName(location.warehouseName)
+      : location.warehouseId === user?.defaultWarehouse?.id;
+  }
+
   function printBarcodeLabels() {
     if (!selectedLabelOption) return;
     const copies = Math.max(1, Math.min(200, Number.parseInt(labelQuantity, 10) || 1));
@@ -280,9 +289,8 @@ export function ProductDetailPage() {
     const barcodeSvg = buildCode39Svg(encodedBarcode, { height: 62, narrowBarWidth: 1.8, wideBarWidth: 4.6, quietZone: 12 });
     const labelsMarkup = Array.from({ length: copies }, () => `
       <section class="label">
-        <div class="title">${selectedLabelOption.title}</div>
         <div class="category">${selectedLabelOption.categoryLabel}</div>
-        ${selectedLabelOption.subtitle ? `<div class="subtitle">${selectedLabelOption.subtitle}</div>` : ""}
+        <div class="subtitle">${selectedLabelOption.title}</div>
         <div class="meta-row">
           <div class="reference">${selectedLabelOption.reference}</div>
           <div class="price">${selectedLabelOption.priceLabel}</div>
@@ -318,14 +326,6 @@ export function ProductDetailPage() {
               gap: 1mm;
             }
             .label:last-child { page-break-after: auto; }
-            .title {
-              font-size: 5.9pt;
-              line-height: 1.05;
-              font-weight: 500;
-              color: #111111;
-              max-height: 4.6mm;
-              overflow: hidden;
-            }
             .category {
               font-size: 7.3pt;
               line-height: 1.05;
@@ -539,7 +539,7 @@ export function ProductDetailPage() {
                     >
                       <div className="text-sm font-semibold text-white">{cleanWarehouseName(location.warehouseName) || "Boutique"}</div>
                       <div className="mt-1 text-xs text-[#b9aa9b]">
-                        {location.warehouseId === user?.defaultWarehouse?.id ? "Boutique courante" : "Autre boutique"}
+                        {isCurrentStockLocation(location) ? "Boutique courante" : "Autre boutique"}
                       </div>
                       <div className={location.quantity < 0
                         ? "mt-3 inline-flex rounded-full border border-rose-300/30 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-100"
@@ -614,31 +614,6 @@ export function ProductDetailPage() {
                       </tbody>
                     </table>
                   </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {item.variants.map((variant) => {
-                      const locationQuantity = variant.locationBalances.find((location) => location.warehouseId === activeVariantWarehouseId)?.quantity ?? 0;
-                      return (
-                        <div key={variant.id} className="product-variant-card rounded-[20px] border border-white/10 bg-[#120e0c] px-4 py-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-white">{variant.label}</p>
-                              <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[#b9aa9b]">
-                                {variant.colorReference ? (
-                                  <span className="rounded-full border border-orange-300/20 bg-orange-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-100">{variant.colorReference}</span>
-                                ) : null}
-                                <span>{(variant.color?.trim() || "Sans couleur")} - {(variant.size?.trim() || "Sans taille")}</span>
-                              </p>
-                            </div>
-                            <Badge tone={locationQuantity > 0 ? "success" : locationQuantity < 0 ? "danger" : "danger"}>{formatNumber(locationQuantity)}</Badge>
-                          </div>
-                          <div className={variant.stockOnHand < 0 ? "mt-3 text-xs text-rose-200" : "mt-3 text-xs text-[#cdbfb1]"}>
-                            Stock global variante : {formatNumber(variant.stockOnHand)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
               ) : null}
             </div>
@@ -651,10 +626,10 @@ export function ProductDetailPage() {
           ) : (
             <div className="space-y-3">
               {orderedLocationBalances.map((location) => (
-                <div key={location.warehouseId} className={`flex items-center justify-between rounded-[22px] border px-4 py-3 ${location.warehouseId === user?.defaultWarehouse?.id ? "border-orange-300/30 bg-orange-300/10" : "border-white/10 bg-black/20"}`}>
+                <div key={location.warehouseId} className={`flex items-center justify-between rounded-[22px] border px-4 py-3 ${isCurrentStockLocation(location) ? "border-orange-300/30 bg-orange-300/10" : "border-white/10 bg-black/20"}`}>
                   <div>
                     <p className="text-sm font-semibold text-white">{cleanWarehouseName(location.warehouseName) || "Emplacement"}</p>
-                    <p className="mt-1 text-xs text-[#b9aa9b]">{location.warehouseId === user?.defaultWarehouse?.id ? "Boutique courante" : "Autre boutique"}</p>
+                    <p className="mt-1 text-xs text-[#b9aa9b]">{isCurrentStockLocation(location) ? "Boutique courante" : "Autre boutique"}</p>
                   </div>
                   <Badge tone={location.quantity > 0 ? "success" : location.quantity < 0 ? "danger" : "danger"}>{formatNumber(location.quantity)}</Badge>
                 </div>
@@ -714,7 +689,7 @@ export function ProductDetailPage() {
                 <Select value={selectedLabelId} onChange={(event) => setSelectedLabelId(event.target.value)}>
                   {labelOptions.map((option) => (
                     <option key={option.id} value={option.id}>
-                      {option.title} - {option.subtitle}
+                      {option.title} - {option.reference}
                     </option>
                   ))}
                 </Select>
@@ -735,14 +710,13 @@ export function ProductDetailPage() {
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-white">{selectedLabelOption.title}</p>
-                    <p className="mt-1 text-xs text-[#cdbfb1]">{selectedLabelOption.subtitle}</p>
+                    <p className="mt-1 text-xs text-[#cdbfb1]">{selectedLabelOption.reference}</p>
                   </div>
                   <Badge tone="warning">50 x 30 mm</Badge>
                 </div>
                 <div className="rounded-[20px] border border-white/10 bg-white px-3 py-3">
-                  <p className="truncate text-[7px] font-medium text-[#18120e]">{selectedLabelOption.title}</p>
-                  <p className="mt-1 truncate text-[11px] font-semibold text-[#18120e]">{selectedLabelOption.categoryLabel}</p>
-                  {selectedLabelOption.subtitle ? <p className="mt-1 truncate text-[9px] text-[#5c5147]">{selectedLabelOption.subtitle}</p> : null}
+                  <p className="truncate text-[11px] font-semibold text-[#18120e]">{selectedLabelOption.categoryLabel}</p>
+                  <p className="mt-1 truncate text-[9px] text-[#5c5147]">{selectedLabelOption.title}</p>
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <p className="text-[10px] font-semibold tracking-[0.06em] text-[#18120e]">{selectedLabelOption.reference}</p>
                     <p className="whitespace-nowrap text-[10px] font-semibold text-[#18120e]">{selectedLabelOption.priceLabel}</p>
