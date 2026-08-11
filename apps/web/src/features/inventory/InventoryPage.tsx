@@ -116,7 +116,7 @@ export function InventoryPage() {
     }));
     setTransferForm((current) => ({
       ...current,
-      productId: current.productId || bootstrap.products[0]?.id || "",
+      productId: current.productId || "",
       fromWarehouseId: current.fromWarehouseId || user?.defaultWarehouse?.id || bootstrap.warehouses[0]?.id || "",
       toWarehouseId: current.toWarehouseId || user?.defaultWarehouse?.id || bootstrap.warehouses[1]?.id || bootstrap.warehouses[0]?.id || ""
     }));
@@ -131,6 +131,11 @@ export function InventoryPage() {
     if (!adjustmentModalOpen) return;
     window.setTimeout(() => document.querySelector<HTMLInputElement>("[data-stock-adjustment-search]")?.focus(), 40);
   }, [adjustmentModalOpen]);
+
+  useEffect(() => {
+    if (!transferModalOpen) return;
+    window.setTimeout(() => document.querySelector<HTMLInputElement>("[data-stock-transfer-search]")?.focus(), 40);
+  }, [transferModalOpen]);
 
   async function submitAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -253,12 +258,19 @@ export function InventoryPage() {
 
   const transferProducts = useMemo(() => {
     const query = transferSearch.trim().toLowerCase();
-    if (!query) return products;
-    return products.filter((product) =>
+    if (!query) return [];
+    return overview.filter((product) =>
       product.name.toLowerCase().includes(query)
       || String(product.reference ?? "").toLowerCase().includes(query)
-    );
-  }, [products, transferSearch]);
+      || product.variants.some((variant) =>
+        String(variant.reference ?? "").toLowerCase().includes(query)
+        || String(variant.label ?? "").toLowerCase().includes(query)
+        || String(variant.color ?? "").toLowerCase().includes(query)
+        || String(variant.colorReference ?? "").toLowerCase().includes(query)
+        || String(variant.size ?? "").toLowerCase().includes(query)
+      )
+    ).slice(0, 12);
+  }, [overview, transferSearch]);
 
   const selectedAdjustmentProduct = useMemo(
     () => overview.find((item) => item.id === form.productId),
@@ -419,6 +431,18 @@ export function InventoryPage() {
     setAdjustmentSearch(product.reference ? `${product.reference} - ${product.name}` : product.name);
   }
 
+  function selectTransferProduct(product: ProductStockOverview) {
+    setTransferForm((current) => ({
+      ...current,
+      productId: product.id,
+      variantId: "",
+      fromWarehouseId: "",
+      toWarehouseId: "",
+      quantity: "1"
+    }));
+    setTransferSearch(product.reference ? `${product.reference} - ${product.name}` : product.name);
+  }
+
   function openAdjustmentModal() {
     setAdjustmentModalOpen(true);
     setAdjustmentSearch("");
@@ -436,7 +460,7 @@ export function InventoryPage() {
     setTransferModalOpen(false);
     setTransferSearch("");
     setTransferForm({
-      productId: transferProducts[0]?.id || products[0]?.id || "",
+      productId: "",
       variantId: "",
       fromWarehouseId: "",
       quantity: "1",
@@ -449,7 +473,7 @@ export function InventoryPage() {
     setTransferModalOpen(true);
     setTransferSearch("");
     setTransferForm({
-      productId: transferProducts[0]?.id || products[0]?.id || "",
+      productId: "",
       variantId: "",
       fromWarehouseId: "",
       quantity: "1",
@@ -962,29 +986,54 @@ export function InventoryPage() {
             <form className="flex min-h-0 flex-1 flex-col" onSubmit={submitTransfer}>
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 md:px-6">
                 <Field label="Article">
-                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div className="space-y-3">
                     <Input
+                      data-stock-transfer-search
                       placeholder="Rechercher par reference ou article..."
                       value={transferSearch}
                       onChange={(event) => setTransferSearch(event.target.value)}
                     />
-                    <Select
-                      value={transferForm.productId}
-                      onChange={(event) => setTransferForm((current) => ({
-                        ...current,
-                        productId: event.target.value,
-                        variantId: "",
-                        fromWarehouseId: "",
-                        toWarehouseId: "",
-                        quantity: "1"
-                      }))}
-                    >
-                      {transferProducts.map((product) => (
-                        <option key={product.id} value={product.id}>
-                          {product.reference ? `${product.reference} - ` : ""}{product.name}
-                        </option>
-                      ))}
-                    </Select>
+                    {transferSearch.trim() ? (
+                      <div className="max-h-[220px] space-y-2 overflow-auto rounded-[20px] border border-white/10 bg-black/20 p-2">
+                        {transferProducts.length ? transferProducts.map((product) => {
+                          const isSelected = transferForm.productId === product.id;
+                          const variantsCount = product.variants.length;
+                          return (
+                            <button
+                              key={product.id}
+                              type="button"
+                              onClick={() => selectTransferProduct(product)}
+                              className={isSelected
+                                ? "transfer-product-result transfer-product-result-active flex w-full items-center justify-between gap-3 rounded-[18px] border border-[#ff9d2f] bg-[#ff9d2f] px-3 py-2.5 text-left shadow-[0_10px_30px_rgba(255,157,47,0.18)]"
+                                : "transfer-product-result flex w-full items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-[#120e0c] px-3 py-2.5 text-left transition hover:border-white/20 hover:bg-black/25"}
+                            >
+                              <span className="min-w-0">
+                                <span className={`block truncate text-sm font-semibold ${isSelected ? "text-[#1e1209]" : "text-white"}`}>
+                                  {product.reference ? `${product.reference} - ` : ""}{product.name}
+                                </span>
+                                <span className={`mt-1 block text-xs ${isSelected ? "text-[#3f2a19]" : "text-[#b9aa9b]"}`}>
+                                  {variantsCount ? `${formatNumber(variantsCount)} variante(s)` : "Article simple"}
+                                </span>
+                              </span>
+                              <span className={isSelected
+                                ? "inline-flex shrink-0 rounded-full bg-[#1e1209]/10 px-2.5 py-1 text-xs font-semibold text-[#1e1209]"
+                                : "inline-flex shrink-0 rounded-full bg-orange-300/18 px-2.5 py-1 text-xs font-semibold text-white"}
+                              >
+                                {formatNumber(product.stockOnHand)}
+                              </span>
+                            </button>
+                          );
+                        }) : (
+                          <div className="rounded-[16px] border border-white/10 bg-black/15 px-3 py-4 text-sm text-[#cdbfb1]">
+                            Aucun article trouve pour cette recherche.
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="rounded-[18px] border border-white/10 bg-black/20 px-4 py-3 text-sm text-[#cdbfb1]">
+                        Saisis une reference ou le nom d'un article pour afficher les resultats.
+                      </div>
+                    )}
                   </div>
                 </Field>
 

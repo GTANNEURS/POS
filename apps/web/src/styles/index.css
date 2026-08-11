@@ -537,6 +537,13 @@ html[data-theme="light"] .product-variant-location-active {
     inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
+html[data-theme="light"] .product-stock-pill {
+  background: rgba(255, 255, 255, 0.72) !important;
+  color: #17100b !important;
+  border: 1px solid rgba(75, 50, 31, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
 html[data-theme="light"] .product-variant-summary {
   color: var(--gdt-brown) !important;
 }
@@ -568,6 +575,63 @@ html[data-theme="light"] .product-variant-builder .select-base {
   border-color: rgba(31, 78, 216, 0.18) !important;
   background-color: rgba(255, 252, 247, 0.98) !important;
   color: var(--gdt-leather-dark) !important;
+}
+
+html[data-theme="light"] .inventory-create-modal {
+  border-color: rgba(138, 85, 43, 0.24) !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(31, 78, 216, 0.10), transparent 34%),
+    linear-gradient(145deg, rgba(255, 250, 242, 0.98), rgba(236, 221, 202, 0.96)) !important;
+  box-shadow:
+    0 34px 90px rgba(76, 51, 32, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.74) !important;
+}
+
+html[data-theme="light"] .inventory-create-header {
+  border-color: rgba(138, 85, 43, 0.16) !important;
+  background:
+    linear-gradient(90deg, rgba(255, 184, 107, 0.18), rgba(31, 78, 216, 0.06));
+}
+
+html[data-theme="light"] .inventory-create-kicker {
+  color: var(--gdt-brown) !important;
+}
+
+html[data-theme="light"] .inventory-create-title {
+  color: var(--gdt-leather-dark) !important;
+}
+
+html[data-theme="light"] .inventory-create-filter-panel {
+  border-color: rgba(31, 78, 216, 0.18) !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(31, 78, 216, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(255, 252, 247, 0.88), rgba(241, 226, 207, 0.82)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+html[data-theme="light"] .transfer-product-result {
+  border-color: rgba(75, 50, 31, 0.16) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.92), rgba(242, 229, 211, 0.86)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+html[data-theme="light"] .transfer-product-result:hover {
+  border-color: rgba(31, 78, 216, 0.24) !important;
+  background:
+    linear-gradient(135deg, rgba(31, 78, 216, 0.08), rgba(255, 184, 107, 0.20)),
+    linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(239, 222, 202, 0.92)) !important;
+  box-shadow:
+    0 12px 26px rgba(31, 78, 216, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.64);
+}
+
+html[data-theme="light"] .transfer-product-result-active {
+  border-color: rgba(255, 137, 24, 0.52) !important;
+  background: linear-gradient(135deg, #ffb765, #ff8a18) !important;
+  box-shadow:
+    0 14px 32px rgba(167, 91, 20, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 html[data-theme="light"] .product-variant-builder .input-base:focus,

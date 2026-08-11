@@ -547,7 +547,7 @@ export function ProductDetailPage() {
                       </div>
                       <div className={location.quantity < 0
                         ? "mt-3 inline-flex rounded-full border border-rose-300/30 bg-rose-400/10 px-3 py-1 text-xs font-semibold text-rose-100"
-                        : "mt-3 inline-flex rounded-full bg-white/8 px-3 py-1 text-xs font-semibold text-[#f3e7d8]"}
+                        : "product-stock-pill mt-3 inline-flex rounded-full bg-white/8 px-3 py-1 text-xs font-semibold text-[#f3e7d8]"}
                       >
                         {formatNumber(location.quantity)} en stock
                       </div>

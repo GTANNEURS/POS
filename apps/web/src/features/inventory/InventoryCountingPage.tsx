@@ -1430,11 +1430,11 @@ export function InventoryCountingPage({ countingOnly = false }: { countingOnly?:
 
       {!countingOnly && createModalOpen && bootstrap ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#050403]/82 p-4 backdrop-blur-[2px]" onMouseDown={() => !saving && setCreateModalOpen(false)}>
-          <div className="flex h-[calc(100vh-2rem)] w-full max-w-[1100px] flex-col overflow-hidden rounded-[30px] border border-white/12 bg-[linear-gradient(180deg,#18120e,#100b08)] shadow-[0_32px_90px_rgba(0,0,0,0.55)] md:h-[760px]" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+          <div className="inventory-create-modal flex h-[calc(100vh-2rem)] w-full max-w-[1100px] flex-col overflow-hidden rounded-[30px] border border-white/12 bg-[linear-gradient(180deg,#18120e,#100b08)] shadow-[0_32px_90px_rgba(0,0,0,0.55)] md:h-[760px]" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="inventory-create-header flex items-center justify-between border-b border-white/10 px-6 py-5">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-300/75">Inventaire</p>
-                <h2 className="mt-1 text-2xl font-semibold text-white">Nouvelle session de comptage</h2>
+                <p className="inventory-create-kicker text-xs font-semibold uppercase tracking-[0.28em] text-orange-300/75">Inventaire</p>
+                <h2 className="inventory-create-title mt-1 text-2xl font-semibold text-white">Nouvelle session de comptage</h2>
               </div>
               <Button variant="secondary" className="!h-10 !px-4" onClick={() => !saving && setCreateModalOpen(false)}>
                 Fermer
@@ -1469,7 +1469,7 @@ export function InventoryCountingPage({ countingOnly = false }: { countingOnly?:
                   </label>
                 </div>
 
-                <div className="space-y-4 rounded-[28px] border border-white/10 bg-black/15 p-4">
+                <div className="inventory-create-filter-panel space-y-4 rounded-[28px] border border-white/10 bg-black/15 p-4">
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/70">Filtres de preparation</div>
                     <h3 className="mt-2 text-lg font-semibold text-white">Selection des lignes a controler</h3>
