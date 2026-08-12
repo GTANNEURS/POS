@@ -249,6 +249,10 @@ type InventoryTransferNotification = {
   toWarehouseName: string;
   reason: string;
   createdAt: string;
+  status?: "PENDING" | "ACCEPTED" | "REJECTED";
+  respondedAt?: string | null;
+  respondedByUserId?: string | null;
+  respondedByName?: string | null;
 };
 
 type InventoryTransferNotificationHistory = InventoryTransferNotification & {
@@ -619,6 +623,7 @@ export function AppShell() {
   const [inventoryHistoryOpen, setInventoryHistoryOpen] = useState(false);
   const [inventoryHistoryLoading, setInventoryHistoryLoading] = useState(false);
   const [inventoryHistory, setInventoryHistory] = useState<InventoryTransferNotificationHistory[]>([]);
+  const [inventoryNotificationActionId, setInventoryNotificationActionId] = useState<string | null>(null);
   const [cashierSessionMenuOpen, setCashierSessionMenuOpen] = useState(false);
   const [cashierSessionLoading, setCashierSessionLoading] = useState(false);
   const [currentCashSession, setCurrentCashSession] = useState<CurrentCashSession>(null);
@@ -1439,12 +1444,26 @@ export function AppShell() {
     }
   }
 
-  async function dismissInventoryNotification(notificationId: string) {
+  async function respondInventoryNotification(notificationId: string, decision: "ACCEPTED" | "REJECTED") {
+    setInventoryNotificationActionId(`${notificationId}:${decision}`);
     try {
-      await api(`/inventory/notifications/${notificationId}/read`, { method: "POST" });
-    } finally {
+      await api(`/inventory/notifications/${notificationId}/respond`, {
+        method: "POST",
+        body: JSON.stringify({ decision })
+      });
+      const respondedAt = new Date().toISOString();
       setInventoryNotifications((current) => current.filter((notification) => notification.id !== notificationId));
-      setInventoryHistory((current) => current.map((notification) => notification.id === notificationId ? { ...notification, isRead: true } : notification));
+      setInventoryHistory((current) => current.map((notification) => notification.id === notificationId ? {
+        ...notification,
+        status: decision,
+        isRead: true,
+        respondedAt,
+        respondedByName: user?.fullName ?? null
+      } : notification));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Validation de reception impossible.");
+    } finally {
+      setInventoryNotificationActionId(null);
     }
   }
 
@@ -2281,12 +2300,16 @@ export function AppShell() {
     <div className="h-screen overflow-hidden bg-transparent">
       {inventoryNotifications.length ? (
         <div className="pointer-events-none fixed right-4 top-4 z-[90] flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3">
-          {inventoryNotifications.map((notification) => (
+          {inventoryNotifications.map((notification) => {
+            const acceptActionId = `${notification.id}:ACCEPTED`;
+            const rejectActionId = `${notification.id}:REJECTED`;
+            const isActionLoading = inventoryNotificationActionId?.startsWith(`${notification.id}:`) ?? false;
+            return (
             <div
               key={notification.id}
               className="pointer-events-auto rounded-[24px] border border-orange-300/25 bg-[#1a120d]/96 p-4 shadow-[0_24px_70px_rgba(0,0,0,0.42)] backdrop-blur-sm"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <Bell className="h-4 w-4 text-orange-200" />
@@ -2302,16 +2325,29 @@ export function AppShell() {
                   <p className="mt-1 text-xs text-[#bba999]">{formatTicketDate(notification.createdAt)}</p>
                   <p className="mt-2 text-xs text-[#c9bbad]">Motif : {notification.reason}</p>
                 </div>
-                <button
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Button
                   type="button"
-                  className="rounded-full border border-white/10 p-2 text-[#eadfd4] transition hover:border-orange-300/35 hover:text-white"
-                  onClick={() => void dismissInventoryNotification(notification.id)}
+                  className="!h-9 !rounded-[16px] !bg-emerald-500 !px-3 !text-xs !font-bold !text-white shadow-[0_12px_28px_rgba(16,185,129,0.22)] hover:!bg-emerald-600"
+                  disabled={isActionLoading}
+                  onClick={() => void respondInventoryNotification(notification.id, "ACCEPTED")}
                 >
-                  <X className="h-4 w-4" />
-                </button>
+                  {inventoryNotificationActionId === acceptActionId ? "Validation..." : "Valider"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!h-9 !rounded-[16px] !border-rose-300/25 !bg-rose-500/15 !px-3 !text-xs !font-bold !text-rose-100 hover:!border-rose-300/45 hover:!bg-rose-500/25"
+                  disabled={isActionLoading}
+                  onClick={() => void respondInventoryNotification(notification.id, "REJECTED")}
+                >
+                  {inventoryNotificationActionId === rejectActionId ? "Refus..." : "Refuser"}
+                </Button>
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       ) : null}
       {mobileMenuOpen ? (
@@ -2971,7 +3007,18 @@ export function AppShell() {
                       <LoadingBlock label="Chargement des notifications..." />
                     ) : inventoryHistory.length ? (
                       <div className="space-y-3">
-                        {inventoryHistory.map((notification) => (
+                        {inventoryHistory.map((notification) => {
+                          const status = notification.status ?? "PENDING";
+                          const statusLabel = status === "ACCEPTED" ? "Valide" : status === "REJECTED" ? "Refuse" : "En attente";
+                          const statusClass = status === "ACCEPTED"
+                            ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100"
+                            : status === "REJECTED"
+                              ? "border-rose-300/25 bg-rose-400/10 text-rose-100"
+                              : "border-orange-300/25 bg-orange-300/10 text-orange-100";
+                          const acceptActionId = `${notification.id}:ACCEPTED`;
+                          const rejectActionId = `${notification.id}:REJECTED`;
+                          const isActionLoading = inventoryNotificationActionId?.startsWith(`${notification.id}:`) ?? false;
+                          return (
                           <div key={notification.id} className="rounded-[22px] border border-white/10 bg-black/20 p-4">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -2980,8 +3027,8 @@ export function AppShell() {
                                     {notification.productName}
                                     {notification.variantLabel ? ` - ${notification.variantLabel}` : ""}
                                   </p>
-                                  <span className={notification.isRead ? "rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#cdbfaf]" : "rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-100"}>
-                                    {notification.isRead ? "Lue" : "Nouvelle"}
+                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${statusClass}`}>
+                                    {statusLabel}
                                   </span>
                                 </div>
                                 <p className="mt-2 text-sm text-[#d7c8ba]">
@@ -2989,15 +3036,35 @@ export function AppShell() {
                                 </p>
                                 <p className="mt-1 text-xs text-[#bba999]">{formatTicketDate(notification.createdAt)}</p>
                                 <p className="mt-2 text-xs text-[#c9bbad]">Motif : {notification.reason}</p>
+                                {notification.respondedAt ? (
+                                  <p className="mt-2 text-xs text-[#bba999]">
+                                    Traite par {notification.respondedByName || "Session"} le {formatTicketDate(notification.respondedAt)}
+                                  </p>
+                                ) : null}
                               </div>
-                              {!notification.isRead ? (
-                                <Button variant="secondary" className="!h-8 !px-3 !text-[11px]" onClick={() => void dismissInventoryNotification(notification.id)}>
-                                  Marquer lue
-                                </Button>
+                              {status === "PENDING" ? (
+                                <div className="grid min-w-[180px] grid-cols-2 gap-2">
+                                  <Button
+                                    className="!h-8 !rounded-[14px] !bg-emerald-500 !px-2 !text-[11px] !text-white hover:!bg-emerald-600"
+                                    disabled={isActionLoading}
+                                    onClick={() => void respondInventoryNotification(notification.id, "ACCEPTED")}
+                                  >
+                                    {inventoryNotificationActionId === acceptActionId ? "..." : "Valider"}
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    className="!h-8 !rounded-[14px] !border-rose-300/25 !bg-rose-500/15 !px-2 !text-[11px] !text-rose-100 hover:!bg-rose-500/25"
+                                    disabled={isActionLoading}
+                                    onClick={() => void respondInventoryNotification(notification.id, "REJECTED")}
+                                  >
+                                    {inventoryNotificationActionId === rejectActionId ? "..." : "Refuser"}
+                                  </Button>
+                                </div>
                               ) : null}
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <EmptyState title="Aucune notification" description="Les transferts entrants de ta boutique apparaitront ici." compact />

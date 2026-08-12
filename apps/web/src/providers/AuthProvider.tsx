@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../lib/api";
-import { isNetworkError, isOfflineToken, loginOfflineCashier, rememberOfflineCashierLogin } from "../lib/offline";
+import { forgetOfflineCashier, isNetworkError, isOfflineToken, loginOfflineCashier, rememberOfflineCashierLogin } from "../lib/offline";
 
 type User = {
   id: string;
@@ -22,7 +22,7 @@ type AuthContextValue = {
   user: User | null;
   token: string | null;
   sessionScope: SessionScope;
-  login: (credentials: LoginCredentials, options?: { scope?: SessionScope }) => Promise<User>;
+  login: (credentials: LoginCredentials, options?: { rememberDevice?: boolean; scope?: SessionScope }) => Promise<User>;
   logout: () => Promise<void>;
   ready: boolean;
 };
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     token,
     sessionScope,
     ready,
-    async login(credentials: LoginCredentials, options?: { scope?: SessionScope }) {
+    async login(credentials: LoginCredentials, options?: { rememberDevice?: boolean; scope?: SessionScope }) {
       let data: { accessToken: string; user: User };
       try {
         data = await api<{ accessToken: string; user: User }>("/auth/login", {
@@ -156,9 +156,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("gdt_access_token", data.accessToken);
       const nextScope = options?.scope === "command_validation" ? "command_validation" : "full";
       localStorage.setItem("gdt_session_scope", nextScope);
-      localStorage.setItem(isOfflineToken(data.accessToken) ? "gdt_offline_user" : "gdt_last_user", JSON.stringify(data.user));
-      if (credentials.loginType === "caissier" && !isOfflineToken(data.accessToken)) {
+      if (isOfflineToken(data.accessToken)) {
+        localStorage.setItem("gdt_offline_user", JSON.stringify(data.user));
+      } else if (options?.rememberDevice) {
+        localStorage.setItem("gdt_last_user", JSON.stringify(data.user));
+      } else {
+        localStorage.removeItem("gdt_last_user");
+      }
+      if (credentials.loginType === "caissier" && !isOfflineToken(data.accessToken) && options?.rememberDevice) {
         await rememberOfflineCashierLogin(credentials.code, data.user);
+      } else if (credentials.loginType === "caissier" && !isOfflineToken(data.accessToken)) {
+        forgetOfflineCashier(data.user.id);
       }
       setToken(data.accessToken);
       setSessionScope(nextScope);

@@ -5,6 +5,50 @@ import { Button, Input } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
 type LoginMode = "admin" | "manager" | "caissier";
+type PendingLogin = {
+  credentials:
+    | { loginType: "admin"; email: string; password: string }
+    | { loginType: "manager"; username: string; password: string }
+    | { loginType: "caissier"; code: string };
+  targetPath: string;
+};
+type TrustedLoginProfile = {
+  mode: LoginMode;
+  identifier: string;
+  savedAt: string;
+};
+
+const TRUSTED_DEVICE_SKIP_KEY = "gdt_skip_trusted_device_prompt";
+const TRUSTED_LOGIN_PROFILE_KEY = "gdt_trusted_login_profile_v1";
+
+function readTrustedLoginProfile(): TrustedLoginProfile | null {
+  try {
+    const rawProfile = localStorage.getItem(TRUSTED_LOGIN_PROFILE_KEY);
+    if (!rawProfile) return null;
+    const profile = JSON.parse(rawProfile) as Partial<TrustedLoginProfile>;
+    if (profile.mode !== "admin" && profile.mode !== "manager" && profile.mode !== "caissier") return null;
+    return {
+      mode: profile.mode,
+      identifier: typeof profile.identifier === "string" ? profile.identifier : "",
+      savedAt: typeof profile.savedAt === "string" ? profile.savedAt : new Date().toISOString()
+    };
+  } catch {
+    return null;
+  }
+}
+
+function rememberTrustedLoginProfile(credentials: PendingLogin["credentials"]) {
+  const profile: TrustedLoginProfile = {
+    mode: credentials.loginType,
+    identifier: credentials.loginType === "admin"
+      ? credentials.email.trim()
+      : credentials.loginType === "manager"
+        ? credentials.username.trim()
+        : "",
+    savedAt: new Date().toISOString()
+  };
+  localStorage.setItem(TRUSTED_LOGIN_PROFILE_KEY, JSON.stringify(profile));
+}
 
 function normalizeScanValue(value: string) {
   const trimmed = value.trim();
@@ -20,9 +64,10 @@ function normalizeScanValue(value: string) {
 export function LoginPage() {
   const { login, logout } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<LoginMode>("admin");
-  const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
+  const trustedProfile = useMemo(() => readTrustedLoginProfile(), []);
+  const [mode, setMode] = useState<LoginMode>(trustedProfile?.mode ?? "admin");
+  const [email, setEmail] = useState(trustedProfile?.mode === "admin" ? trustedProfile.identifier : "");
+  const [username, setUsername] = useState(trustedProfile?.mode === "manager" ? trustedProfile.identifier : "");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [cashierScannedCode, setCashierScannedCode] = useState(false);
@@ -34,6 +79,8 @@ export function LoginPage() {
   const [commandLoading, setCommandLoading] = useState(false);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [spaceNotice, setSpaceNotice] = useState<string | null>(null);
+  const [trustedDeviceOpen, setTrustedDeviceOpen] = useState(false);
+  const [pendingLogin, setPendingLogin] = useState<PendingLogin | null>(null);
 
   const title = useMemo(() => {
     if (mode === "admin") return "Accès Administrateurs";
@@ -67,15 +114,21 @@ export function LoginPage() {
       if (mode === "caissier" && code.trim().length < 4) {
         throw new Error("Le code confidentiel doit contenir au moins 4 chiffres.");
       }
-      const user = await login(
-        mode === "admin"
-          ? { loginType: "admin", email, password }
-          : mode === "manager"
-            ? { loginType: "manager", username, password }
-            : { loginType: "caissier", code }
-      );
+      const credentials = mode === "admin"
+        ? { loginType: "admin" as const, email, password }
+        : mode === "manager"
+          ? { loginType: "manager" as const, username, password }
+          : { loginType: "caissier" as const, code };
+      const user = await login(credentials, { rememberDevice: false });
       const isCashier = (user.roles ?? []).some((role) => role.toLowerCase() === "caissier");
-      navigate(isCashier ? "/pos" : "/", { replace: true });
+      const targetPath = isCashier ? "/pos" : "/";
+      const skipPrompt = localStorage.getItem(TRUSTED_DEVICE_SKIP_KEY) === "1";
+      if (skipPrompt) {
+        navigate(targetPath, { replace: true });
+        return;
+      }
+      setPendingLogin({ credentials, targetPath });
+      setTrustedDeviceOpen(true);
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : "Connexion impossible.";
       if (rawMessage.includes("\"path\":[\"code\"]") && rawMessage.includes("\"minimum\":4")) {
@@ -86,6 +139,31 @@ export function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function finishTrustedDeviceChoice(rememberDevice: boolean, skipFuturePrompt = false) {
+    if (!pendingLogin) return;
+    if (skipFuturePrompt) {
+      localStorage.setItem(TRUSTED_DEVICE_SKIP_KEY, "1");
+    }
+    setTrustedDeviceOpen(false);
+    if (rememberDevice) {
+      setLoading(true);
+      try {
+        await login(pendingLogin.credentials, { rememberDevice: true });
+        rememberTrustedLoginProfile(pendingLogin.credentials);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Sauvegarde de l'appareil impossible.");
+        setLoading(false);
+        return;
+      }
+    } else if (skipFuturePrompt) {
+      localStorage.removeItem(TRUSTED_LOGIN_PROFILE_KEY);
+    }
+    const targetPath = pendingLogin.targetPath;
+    setPendingLogin(null);
+    setLoading(false);
+    navigate(targetPath, { replace: true });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -356,6 +434,40 @@ export function LoginPage() {
           </div>
         </section>
       </div>
+
+      {trustedDeviceOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-md">
+          <div className="w-full max-w-[520px] rounded-[30px] border border-orange-300/25 bg-[#17110d] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.48)]">
+            <div className="mb-5 flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[18px] bg-gradient-to-br from-[#ffb15c] to-[#ff7a00] text-[#241409] shadow-[0_12px_28px_rgba(255,127,24,0.24)]">
+                <LockKeyhole className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">Appareil de confiance</p>
+                <h3 className="mt-2 text-2xl font-semibold text-white">Sauvegarder l'acces sur cet appareil ?</h3>
+                <p className="mt-2 text-sm leading-6 text-[#d8c8b8]">
+                  Aucun mot de passe n'est sauvegarde. L'application memorise seulement le profil autorise pour faciliter l'acces et, pour la caisse, preparer le mode hors ligne.
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button type="button" onClick={() => void finishTrustedDeviceChoice(true)}>
+                Oui, sauvegarder
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => void finishTrustedDeviceChoice(false)}>
+                Pas maintenant
+              </Button>
+            </div>
+            <button
+              type="button"
+              className="mt-4 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-[#eadccf] transition hover:border-orange-300/25 hover:bg-orange-300/10"
+              onClick={() => void finishTrustedDeviceChoice(false, true)}
+            >
+              Ne plus demander sur cet appareil
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {commandAccessOpen ? (
         <div className="login-command-overlay fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-md">

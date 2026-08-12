@@ -41,6 +41,10 @@ type InventoryTransferNotification = {
   reason: string;
   createdAt: string;
   readByUserIds: string[];
+  status?: "PENDING" | "ACCEPTED" | "REJECTED";
+  respondedAt?: string | null;
+  respondedByUserId?: string | null;
+  respondedByName?: string | null;
 };
 type SettingsDb = Pick<typeof prisma, "setting">;
 
@@ -63,6 +67,10 @@ const transferSchema = z.object({
   message: "Choisis deux emplacements differents.",
   path: ["toWarehouseId"]
 });
+const transferResponseSchema = z.object({
+  decision: z.enum(["ACCEPTED", "REJECTED"]),
+  note: z.string().optional().default("")
+});
 
 function isTransferNotification(value: unknown): value is InventoryTransferNotification {
   if (!value || typeof value !== "object") return false;
@@ -82,7 +90,10 @@ function isTransferNotification(value: unknown): value is InventoryTransferNotif
 async function readTransferNotifications(db: SettingsDb) {
   const setting = await db.setting.findUnique({ where: { key: INVENTORY_TRANSFER_NOTIFICATIONS_KEY } });
   if (!Array.isArray(setting?.value)) return [];
-  return setting.value.filter(isTransferNotification);
+  return setting.value.filter(isTransferNotification).map((notification) => ({
+    ...notification,
+    status: notification.status ?? "PENDING"
+  }));
 }
 
 async function saveTransferNotifications(
@@ -239,7 +250,7 @@ inventoryRouter.get("/notifications", asyncHandler(async (req: AuthenticatedRequ
 
   const notifications = await readTransferNotifications(prisma);
   const unreadNotifications = notifications
-    .filter((notification) => notification.warehouseId === scopedWarehouseId && !notification.readByUserIds.includes(req.currentUser!.id))
+    .filter((notification) => notification.warehouseId === scopedWarehouseId && (notification.status ?? "PENDING") === "PENDING")
     .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
     .slice(0, 8);
 
@@ -287,6 +298,50 @@ inventoryRouter.post("/notifications/:notificationId/read", asyncHandler(async (
 
   await saveTransferNotifications(prisma, updatedNotifications);
   return ok(res, true);
+}));
+
+inventoryRouter.post("/notifications/:notificationId/respond", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const scopedWarehouseId = getScopedWarehouseId(req.currentUser);
+  if (!scopedWarehouseId || !req.currentUser) {
+    throw new AppError("Boutique non assignee.", 403);
+  }
+  const payload = transferResponseSchema.parse(req.body);
+  const notifications = await readTransferNotifications(prisma);
+  const notification = notifications.find((item) => item.id === req.params.notificationId && item.warehouseId === scopedWarehouseId);
+  if (!notification) {
+    throw new AppError("Notification de transfert introuvable.", 404);
+  }
+  if ((notification.status ?? "PENDING") !== "PENDING") {
+    throw new AppError("Ce transfert a deja ete traite.", 409);
+  }
+
+  const respondedAt = new Date().toISOString();
+  const updatedNotifications = notifications.map((item) => item.id === notification.id ? {
+    ...item,
+    status: payload.decision,
+    respondedAt,
+    respondedByUserId: req.currentUser!.id,
+    respondedByName: req.currentUser!.fullName,
+    readByUserIds: Array.from(new Set([...item.readByUserIds, req.currentUser!.id]))
+  } : item);
+
+  await saveTransferNotifications(prisma, updatedNotifications);
+  await writeAuditLog({
+    userId: req.currentUser.id,
+    action: payload.decision === "ACCEPTED" ? "inventory.transfer.accept" : "inventory.transfer.reject",
+    entityType: "product",
+    entityId: notification.productId,
+    meta: {
+      notificationId: notification.id,
+      productName: notification.productName,
+      quantity: notification.quantity,
+      fromWarehouseId: notification.fromWarehouseId,
+      toWarehouseId: notification.toWarehouseId,
+      note: payload.note
+    }
+  });
+
+  return ok(res, true, payload.decision === "ACCEPTED" ? "Reception de transfert validee." : "Reception de transfert refusee.");
 }));
 
 inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -442,6 +497,7 @@ inventoryRouter.post("/transfers", asyncHandler(async (req: AuthenticatedRequest
       toWarehouseName: targetWarehouse.name,
       reason: payload.reason,
       createdAt: new Date().toISOString(),
+      status: "PENDING",
       readByUserIds: []
     });
     await saveTransferNotifications(tx, notifications);

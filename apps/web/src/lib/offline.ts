@@ -190,6 +190,10 @@ export async function rememberOfflineCashierLogin(code: string, user: CachedUser
   writeCashiers([...others, { user, pinHash, cachedAt: new Date().toISOString() }].slice(-20));
 }
 
+export function forgetOfflineCashier(userId: string) {
+  writeCashiers(readCashiers().filter((entry) => entry.user.id !== userId));
+}
+
 export async function loginOfflineCashier(code: string) {
   const pin = sanitizePin(code);
   if (pin.length < 4) return null;
