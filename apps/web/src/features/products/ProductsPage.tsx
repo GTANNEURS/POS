@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Sparkles, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { cleanDisplayText, cleanWarehouseName, formatCurrency, formatNumber } from "../../lib/format";
@@ -262,6 +262,82 @@ function parseCsv(text: string) {
     .filter((entry) => Object.values(entry).some((value) => value.length > 0));
 }
 
+function loadImageFromSource(source: Blob | string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = typeof source === "string" ? source : URL.createObjectURL(source);
+    const image = new Image();
+    image.onload = () => {
+      if (typeof source !== "string") URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      if (typeof source !== "string") URL.revokeObjectURL(url);
+      reject(new Error("Image impossible a charger."));
+    };
+    image.src = url;
+  });
+}
+
+async function centerImageOnWhiteBackground(source: Blob | string, size = 1200) {
+  const image = await loadImageFromSource(source);
+  const sourceCanvas = document.createElement("canvas");
+  sourceCanvas.width = image.naturalWidth || image.width;
+  sourceCanvas.height = image.naturalHeight || image.height;
+  const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
+  if (!sourceContext) throw new Error("Traitement image indisponible sur ce navigateur.");
+  sourceContext.drawImage(image, 0, 0);
+
+  const pixels = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+  const data = pixels.data;
+  let minX = sourceCanvas.width;
+  let minY = sourceCanvas.height;
+  let maxX = 0;
+  let maxY = 0;
+
+  for (let y = 0; y < sourceCanvas.height; y += 1) {
+    for (let x = 0; x < sourceCanvas.width; x += 1) {
+      const alpha = data[(y * sourceCanvas.width + x) * 4 + 3];
+      if (alpha > 12) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+
+  const hasVisiblePixels = maxX > minX && maxY > minY;
+  const cropX = hasVisiblePixels ? minX : 0;
+  const cropY = hasVisiblePixels ? minY : 0;
+  const cropWidth = hasVisiblePixels ? maxX - minX + 1 : sourceCanvas.width;
+  const cropHeight = hasVisiblePixels ? maxY - minY + 1 : sourceCanvas.height;
+  const outputCanvas = document.createElement("canvas");
+  outputCanvas.width = size;
+  outputCanvas.height = size;
+  const outputContext = outputCanvas.getContext("2d");
+  if (!outputContext) throw new Error("Traitement image indisponible sur ce navigateur.");
+
+  outputContext.fillStyle = "#ffffff";
+  outputContext.fillRect(0, 0, size, size);
+  const padding = Math.round(size * 0.08);
+  const scale = Math.min((size - padding * 2) / cropWidth, (size - padding * 2) / cropHeight);
+  const drawWidth = Math.round(cropWidth * scale);
+  const drawHeight = Math.round(cropHeight * scale);
+  const drawX = Math.round((size - drawWidth) / 2);
+  const drawY = Math.round((size - drawHeight) / 2);
+  outputContext.imageSmoothingEnabled = true;
+  outputContext.imageSmoothingQuality = "high";
+  outputContext.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, drawX, drawY, drawWidth, drawHeight);
+
+  return outputCanvas.toDataURL("image/jpeg", 0.9);
+}
+
+async function optimizeProductPhotoWithAi(imageUrl: string) {
+  const { removeBackground } = await import("@imgly/background-removal");
+  const transparentArticle = await removeBackground(imageUrl);
+  return centerImageOnWhiteBackground(transparentArticle);
+}
+
 function ProductModal({
   open,
   title,
@@ -291,6 +367,8 @@ function ProductModal({
   const [selectedSizeIds, setSelectedSizeIds] = useState<string[]>([]);
   const [selectedColorType, setSelectedColorType] = useState("");
   const [selectedSizeType, setSelectedSizeType] = useState("");
+  const [photoProcessing, setPhotoProcessing] = useState(false);
+  const [photoMessage, setPhotoMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -299,6 +377,8 @@ function ProductModal({
     setSelectedSizeIds([]);
     setSelectedColorType("");
     setSelectedSizeType("");
+    setPhotoProcessing(false);
+    setPhotoMessage(null);
 
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -324,8 +404,24 @@ function ProductModal({
     const reader = new FileReader();
     reader.onload = () => {
       onChange("imageUrl", typeof reader.result === "string" ? reader.result : "");
+      setPhotoMessage("Photo chargee. Tu peux l'optimiser avec IA.");
     };
     reader.readAsDataURL(file);
+  };
+
+  const optimizePhoto = async () => {
+    if (!form.imageUrl) return;
+    setPhotoProcessing(true);
+    setPhotoMessage("Optimisation IA en cours... La premiere fois peut prendre quelques secondes.");
+    try {
+      const optimized = await optimizeProductPhotoWithAi(form.imageUrl);
+      onChange("imageUrl", optimized);
+      setPhotoMessage("Photo optimisee: fond blanc, article centre.");
+    } catch (err) {
+      setPhotoMessage(err instanceof Error ? err.message : "Optimisation IA impossible pour cette photo.");
+    } finally {
+      setPhotoProcessing(false);
+    }
   };
 
   const marginValue = Number(form.salePriceTtc || 0) - Number(form.purchasePriceTtc || 0);
@@ -800,15 +896,15 @@ function ProductModal({
 
               {activeTab === "photo" ? (
                 <div className="mx-auto max-w-[520px]">
-                  <Field label="Photo article" hint="PNG, JPG ou WEBP. Maximum 3 Mo.">
+                  <Field label="Photo article" hint="PNG, JPG ou WEBP. Maximum 3 Mo. L'optimisation IA garde l'article sur fond blanc.">
                     <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleImageChange} />
                     <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
                       <div className="flex flex-col gap-4">
-                        <div className="flex h-[300px] w-full items-center justify-center overflow-hidden rounded-[20px] border border-white/10 bg-black/30">
+                        <div className="flex h-[300px] w-full items-center justify-center overflow-hidden rounded-[20px] border border-white/10 bg-white">
                           {form.imageUrl ? (
-                            <img src={form.imageUrl} alt="Apercu article" className="h-full w-full object-cover" />
+                            <img src={form.imageUrl} alt="Apercu article" className="h-full w-full object-contain" />
                           ) : (
-                            <span className="text-xs text-[#b9aa9b]">Aucune photo</span>
+                            <span className="text-xs text-[#7a6d5f]">Aucune photo</span>
                           )}
                         </div>
                         <div className="flex flex-wrap gap-3">
@@ -817,11 +913,22 @@ function ProductModal({
                             Choisir une photo
                           </Button>
                           {form.imageUrl ? (
+                            <Button type="button" onClick={() => void optimizePhoto()} disabled={photoProcessing}>
+                              <Sparkles className="mr-2 h-4 w-4" />
+                              {photoProcessing ? "Optimisation..." : "Optimiser photo IA"}
+                            </Button>
+                          ) : null}
+                          {form.imageUrl ? (
                             <Button variant="secondary" type="button" onClick={() => onChange("imageUrl", "")}>
                               Supprimer la photo
                             </Button>
                           ) : null}
                         </div>
+                        {photoMessage ? (
+                          <div className="rounded-2xl border border-orange-300/20 bg-orange-300/10 px-4 py-3 text-sm text-orange-100">
+                            {photoMessage}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </Field>
