@@ -7,7 +7,7 @@ import { hasCachedOpenCashSession, isNetworkError, queueOfflineCheckout, readPos
 import { Button, EmptyState, Field, Input, LoadingBlock, SectionCard, Select } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
-type Product = { id: string; productId: string; variantId?: string | null; name: string; reference: string; barcode?: string | null; salePriceTtc: number; stockOnHand: number; color?: string | null; size?: string | null; imageUrl?: string | null };
+type Product = { id: string; productId: string; variantId?: string | null; name: string; reference: string; barcode?: string | null; salePriceTtc: number; regularSalePriceTtc?: number; promoPriceActive?: boolean; stockOnHand: number; color?: string | null; size?: string | null; imageUrl?: string | null };
 type Customer = { id: string; fullName: string; phone?: string | null; email?: string | null };
 type Warehouse = { id: string; name: string; type?: string; address?: string | null; phone?: string | null };
 type CashRegister = { id: string; name: string; warehouseId: string };
@@ -60,7 +60,7 @@ type PosBootstrapPayload = {
     ticketPrintProfiles?: TicketPrintProfiles | null;
   };
 };
-type CartLine = { lineId: string; productId: string; variantId?: string | null; reference?: string; barcode?: string | null; name: string; color?: string | null; size?: string | null; imageUrl?: string | null; quantity: number; price: number; discountAmount: number; kind?: "PRODUCT" | "ORDER_DEPOSIT"; orderSource?: "POS" | "LEGACY"; orderType?: string; orderNumber?: string; orderTotal?: number; depositAmount?: number };
+type CartLine = { lineId: string; productId: string; variantId?: string | null; reference?: string; barcode?: string | null; name: string; color?: string | null; size?: string | null; imageUrl?: string | null; quantity: number; price: number; discountAmount: number; promoPriceActive?: boolean; kind?: "PRODUCT" | "ORDER_DEPOSIT"; orderSource?: "POS" | "LEGACY"; orderType?: string; orderNumber?: string; orderTotal?: number; depositAmount?: number };
 type TicketTab = "payment" | "hold";
 type HeldTicket = {
   id: string;
@@ -1002,7 +1002,8 @@ export function PosPage() {
         imageUrl: product.imageUrl ?? null,
         quantity: 1,
         price: Number(product.salePriceTtc),
-        discountAmount: 0
+        discountAmount: 0,
+        promoPriceActive: Boolean(product.promoPriceActive)
       }];
     });
     setMessage(null);
@@ -1035,6 +1036,10 @@ export function PosPage() {
   }
 
   function openLineDiscountModal(line: CartLine) {
+    if (line.promoPriceActive) {
+      setMessage("Remise non applicable sur un article en prix promo.");
+      return;
+    }
     setActiveDiscountLineId(line.lineId);
     setLineDiscountMode("amount");
     setLineDiscountDraft(String(line.discountAmount || 0));
@@ -1054,6 +1059,12 @@ export function PosPage() {
 
   function requestManagerApproval(action: "offered" | "discount") {
     if (!ticketLineActionLineId) return;
+    const line = cart.find((item) => item.lineId === ticketLineActionLineId);
+    if (line?.promoPriceActive) {
+      setMessage("Offert/remise non applicable sur un article en prix promo.");
+      closeTicketLineActionModal();
+      return;
+    }
     setManagerApprovalLineId(ticketLineActionLineId);
     setManagerApprovalAction(action);
     setManagerApprovalCode("");
@@ -3244,20 +3255,24 @@ export function PosPage() {
       const checkoutWarehousePhone = selectedWarehouse?.phone || "";
       const checkoutRegisterName = selectedRegister?.name || "Caisse";
       const productNetTotal = cart.reduce((sum, line) => {
+        if (line.promoPriceActive) return sum;
         const subtotal = line.quantity * line.price;
         const lineDiscount = Math.min(subtotal, line.discountAmount);
         return sum + Math.max(0, subtotal - lineDiscount);
       }, 0);
+      const lastDiscountableIndex = cart.reduce((lastIndex, line, index) => line.promoPriceActive ? lastIndex : index, -1);
       let remainingTicketDiscount = ticketDiscountValue;
       const items = cart.map((line, index) => {
         const subtotal = line.quantity * line.price;
-        const lineDiscount = Math.min(subtotal, line.discountAmount);
+        const lineDiscount = line.promoPriceActive ? 0 : Math.min(subtotal, line.discountAmount);
         const lineNet = Math.max(0, subtotal - lineDiscount);
-        const extraDiscount = index === cart.length - 1
-          ? remainingTicketDiscount
-          : productNetTotal > 0
-            ? Number(((ticketDiscountValue * lineNet) / productNetTotal).toFixed(2))
-            : 0;
+        const extraDiscount = line.promoPriceActive
+          ? 0
+          : index === lastDiscountableIndex
+            ? remainingTicketDiscount
+            : productNetTotal > 0
+              ? Number(((ticketDiscountValue * lineNet) / productNetTotal).toFixed(2))
+              : 0;
         remainingTicketDiscount = Math.max(0, remainingTicketDiscount - extraDiscount);
         return {
           productId: line.productId,

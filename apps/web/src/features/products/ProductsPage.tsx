@@ -40,11 +40,14 @@ type Product = {
   weight?: string | null;
   isTaxExempt: boolean;
   isCommissioned: boolean;
-  sourcingMode: "BUY_RESELL" | "CONSIGNMENT" | "MANUFACTURED";
+  sourcingMode: "" | "BUY_RESELL" | "CONSIGNMENT" | "MANUFACTURED";
   purchasePriceHt: number;
   purchasePriceTtc: number;
   salePriceHt: number;
   salePriceTtc: number;
+  promoPriceHt?: number | null;
+  promoPriceTtc?: number | null;
+  promoPriceActive: boolean;
   taxRate: number;
   stockOnHand: number;
   minStock: number;
@@ -56,6 +59,8 @@ type Product = {
   warehouse?: { name: string } | null;
   variants?: ProductVariant[];
 };
+
+type ProductSourcingMode = Product["sourcingMode"];
 
 type ProductVariantForm = {
   color: string;
@@ -78,6 +83,9 @@ type ProductForm = {
   purchasePriceTtc: string;
   salePriceHt: string;
   salePriceTtc: string;
+  promoPriceHt: string;
+  promoPriceTtc: string;
+  promoPriceActive: boolean;
   taxRate: string;
   stockOnHand: string;
   minStock: string;
@@ -89,7 +97,7 @@ type ProductForm = {
   weight: string;
   isTaxExempt: boolean;
   isCommissioned: boolean;
-  sourcingMode: "BUY_RESELL" | "CONSIGNMENT" | "MANUFACTURED";
+  sourcingMode: "" | ProductSourcingMode;
   status: "ACTIVE" | "INACTIVE";
   variants: ProductVariantForm[];
 };
@@ -115,6 +123,9 @@ const defaultForm: ProductForm = {
   purchasePriceTtc: "0",
   salePriceHt: "0",
   salePriceTtc: "0",
+  promoPriceHt: "0",
+  promoPriceTtc: "0",
+  promoPriceActive: false,
   taxRate: "20",
   stockOnHand: "0",
   minStock: "0",
@@ -126,7 +137,7 @@ const defaultForm: ProductForm = {
   weight: "",
   isTaxExempt: false,
   isCommissioned: false,
-  sourcingMode: "BUY_RESELL",
+  sourcingMode: "",
   status: "ACTIVE",
   variants: []
 };
@@ -454,6 +465,20 @@ function ProductModal({
     onChange(htKey, parsedValue === null ? "" : formatMoney(parsedValue / (1 + rate / 100)));
   };
 
+  const syncPromoPair = (source: "ht" | "ttc", rawValue: string, rawTaxRate = form.taxRate) => {
+    const rate = parseMoney(rawTaxRate) ?? 0;
+    const parsedValue = parseMoney(rawValue);
+
+    if (source === "ht") {
+      onChange("promoPriceHt", rawValue);
+      onChange("promoPriceTtc", parsedValue === null ? "" : formatMoney(parsedValue * (1 + rate / 100)));
+      return;
+    }
+
+    onChange("promoPriceTtc", rawValue);
+    onChange("promoPriceHt", parsedValue === null ? "" : formatMoney(parsedValue / (1 + rate / 100)));
+  };
+
   const handleTaxRateChange = (rawValue: string) => {
     onChange("taxRate", rawValue);
 
@@ -468,6 +493,14 @@ function ProductModal({
     } else if (form.salePriceTtc.trim()) {
       syncPair("sale", "ttc", form.salePriceTtc, rawValue);
     }
+
+    if (form.promoPriceActive) {
+      if (form.promoPriceHt.trim()) {
+        syncPromoPair("ht", form.promoPriceHt, rawValue);
+      } else if (form.promoPriceTtc.trim()) {
+        syncPromoPair("ttc", form.promoPriceTtc, rawValue);
+      }
+    }
   };
 
   const generateBarcode = () => {
@@ -475,6 +508,34 @@ function ProductModal({
   };
 
   const toggleSelection = (values: string[], id: string) => values.includes(id) ? values.filter((value) => value !== id) : [...values, id];
+  const allFilteredColorIds = filteredColors.map((color) => color.id);
+  const allFilteredSizeIds = filteredSizes.map((size) => size.id);
+  const allFilteredColorsSelected = allFilteredColorIds.length > 0 && allFilteredColorIds.every((id) => selectedColorIds.includes(id));
+  const allFilteredSizesSelected = allFilteredSizeIds.length > 0 && allFilteredSizeIds.every((id) => selectedSizeIds.includes(id));
+
+  const toggleAllFilteredColors = () => {
+    setSelectedColorIds((current) => {
+      const currentSet = new Set(current);
+      if (allFilteredColorsSelected) {
+        allFilteredColorIds.forEach((id) => currentSet.delete(id));
+      } else {
+        allFilteredColorIds.forEach((id) => currentSet.add(id));
+      }
+      return Array.from(currentSet);
+    });
+  };
+
+  const toggleAllFilteredSizes = () => {
+    setSelectedSizeIds((current) => {
+      const currentSet = new Set(current);
+      if (allFilteredSizesSelected) {
+        allFilteredSizeIds.forEach((id) => currentSet.delete(id));
+      } else {
+        allFilteredSizeIds.forEach((id) => currentSet.add(id));
+      }
+      return Array.from(currentSet);
+    });
+  };
 
   const updateVariant = (index: number, patch: Partial<ProductVariantForm>) => {
     onVariantsChange(form.variants.map((variant, variantIndex) => {
@@ -654,25 +715,50 @@ function ProductModal({
               ) : null}
 
               {activeTab === "pricing" ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="Achat HT">
-                    <Input type="number" step="0.01" value={form.purchasePriceHt} onChange={(event) => syncPair("purchase", "ht", event.target.value)} />
-                  </Field>
-                  <Field label="Achat TTC">
-                    <Input type="number" step="0.01" value={form.purchasePriceTtc} onChange={(event) => syncPair("purchase", "ttc", event.target.value)} />
-                  </Field>
-                  <Field label="TVA %">
-                    <Input type="number" step="0.01" value={form.taxRate} onChange={(event) => handleTaxRateChange(event.target.value)} />
-                  </Field>
-                  <Field label="Vente HT">
-                    <Input type="number" step="0.01" value={form.salePriceHt} onChange={(event) => syncPair("sale", "ht", event.target.value)} />
-                  </Field>
-                  <Field label="Vente TTC">
-                    <Input type="number" step="0.01" value={form.salePriceTtc} onChange={(event) => syncPair("sale", "ttc", event.target.value)} />
-                  </Field>
-                  <Field label="Marge">
-                    <Input type="number" step="0.01" value={marginValue.toFixed(2)} readOnly />
-                  </Field>
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <Field label="Achat HT">
+                      <Input type="number" step="0.01" value={form.purchasePriceHt} onChange={(event) => syncPair("purchase", "ht", event.target.value)} />
+                    </Field>
+                    <Field label="Achat TTC">
+                      <Input type="number" step="0.01" value={form.purchasePriceTtc} onChange={(event) => syncPair("purchase", "ttc", event.target.value)} />
+                    </Field>
+                    <Field label="TVA %">
+                      <Input type="number" step="0.01" value={form.taxRate} onChange={(event) => handleTaxRateChange(event.target.value)} />
+                    </Field>
+                    <Field label="Vente HT">
+                      <Input type="number" step="0.01" value={form.salePriceHt} onChange={(event) => syncPair("sale", "ht", event.target.value)} />
+                    </Field>
+                    <Field label="Vente TTC">
+                      <Input type="number" step="0.01" value={form.salePriceTtc} onChange={(event) => syncPair("sale", "ttc", event.target.value)} />
+                    </Field>
+                    <Field label="Marge">
+                      <Input type="number" step="0.01" value={marginValue.toFixed(2)} readOnly />
+                    </Field>
+                  </div>
+
+                  <div className="rounded-[22px] border border-orange-300/20 bg-orange-300/8 p-4">
+                    <label className="flex items-start gap-3 text-sm text-[#efe3d7]">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 accent-orange-400"
+                        checked={form.promoPriceActive}
+                        onChange={(event) => onChange("promoPriceActive", event.target.checked)}
+                      />
+                      <span>
+                        <span className="block font-semibold text-white">Activer prix promo</span>
+                        <span className="mt-1 block text-xs leading-5 text-[#cdbfaf]">Si le prix promo est actif, il sera utilise dans la caisse et aucune remise article/ticket ne sera appliquee sur cet article.</span>
+                      </span>
+                    </label>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      <Field label="Prix promo HT">
+                        <Input type="number" step="0.01" value={form.promoPriceHt} disabled={!form.promoPriceActive} onChange={(event) => syncPromoPair("ht", event.target.value)} />
+                      </Field>
+                      <Field label="Prix promo TTC">
+                        <Input type="number" step="0.01" value={form.promoPriceTtc} disabled={!form.promoPriceActive} onChange={(event) => syncPromoPair("ttc", event.target.value)} />
+                      </Field>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
@@ -720,6 +806,7 @@ function ProductModal({
                     </label>
                     <Field label="Mode article">
                       <Select value={form.sourcingMode} onChange={(event) => onChange("sourcingMode", event.target.value as ProductForm["sourcingMode"])}>
+                        <option value="">Choisir</option>
                         <option value="BUY_RESELL">Achete / revendu</option>
                         <option value="CONSIGNMENT">Depot de vente</option>
                         <option value="MANUFACTURED">Fabrique</option>
@@ -748,6 +835,15 @@ function ProductModal({
                           <span className="shrink-0 rounded-full border border-orange-300/20 bg-orange-300/10 px-2 py-0.5 text-[11px] text-orange-100">{selectedColors.length}</span>
                         </summary>
                         <div className="max-h-[260px] space-y-1 overflow-y-auto border-t border-white/10 p-2">
+                          {filteredColors.length ? (
+                            <button
+                              type="button"
+                              className="mb-1 w-full rounded-[14px] border border-orange-300/25 bg-orange-300/10 px-3 py-2 text-left text-xs font-semibold text-orange-100 transition hover:bg-orange-300/16"
+                              onClick={toggleAllFilteredColors}
+                            >
+                              {allFilteredColorsSelected ? "Tout deselectionner" : "Selectionner toutes les couleurs"}
+                            </button>
+                          ) : null}
                           {filteredColors.map((color) => (
                             <label key={color.id} className="flex cursor-pointer items-start gap-3 rounded-[14px] px-3 py-2 text-sm text-[#efe3d7] transition hover:bg-white/[0.06]">
                               <input type="checkbox" className="mt-1 h-4 w-4 accent-orange-400" checked={selectedColorIds.includes(color.id)} onChange={() => setSelectedColorIds((current) => toggleSelection(current, color.id))} />
@@ -781,6 +877,15 @@ function ProductModal({
                           <span className="shrink-0 rounded-full border border-orange-300/20 bg-orange-300/10 px-2 py-0.5 text-[11px] text-orange-100">{selectedSizes.length}</span>
                         </summary>
                         <div className="max-h-[260px] space-y-1 overflow-y-auto border-t border-white/10 p-2">
+                          {filteredSizes.length ? (
+                            <button
+                              type="button"
+                              className="mb-1 w-full rounded-[14px] border border-orange-300/25 bg-orange-300/10 px-3 py-2 text-left text-xs font-semibold text-orange-100 transition hover:bg-orange-300/16"
+                              onClick={toggleAllFilteredSizes}
+                            >
+                              {allFilteredSizesSelected ? "Tout deselectionner" : "Selectionner toutes les tailles"}
+                            </button>
+                          ) : null}
                           {filteredSizes.map((size) => (
                             <label key={size.id} className="flex cursor-pointer items-start gap-3 rounded-[14px] px-3 py-2 text-sm text-[#efe3d7] transition hover:bg-white/[0.06]">
                               <input type="checkbox" className="mt-1 h-4 w-4 accent-orange-400" checked={selectedSizeIds.includes(size.id)} onChange={() => setSelectedSizeIds((current) => toggleSelection(current, size.id))} />
@@ -1043,6 +1148,9 @@ export function ProductsPage() {
       purchasePriceTtc: String(product.purchasePriceTtc),
       salePriceHt: String(product.salePriceHt),
       salePriceTtc: String(product.salePriceTtc),
+      promoPriceHt: String(product.promoPriceHt ?? "0"),
+      promoPriceTtc: String(product.promoPriceTtc ?? "0"),
+      promoPriceActive: Boolean(product.promoPriceActive),
       taxRate: String(product.taxRate),
       stockOnHand: String(product.stockOnHand),
       minStock: String(product.minStock),
@@ -1115,6 +1223,16 @@ export function ProductsPage() {
       setError("Code-barres article obligatoire.");
       return;
     }
+    if (!form.sourcingMode) {
+      setSaving(false);
+      setError("Mode article obligatoire.");
+      return;
+    }
+    if (form.promoPriceActive && Number(form.promoPriceTtc || 0) <= 0) {
+      setSaving(false);
+      setError("Renseigne le prix promo TTC.");
+      return;
+    }
 
     const variants = form.variants.map((variant, index) => ({
       color: variant.color.trim() || null,
@@ -1131,6 +1249,7 @@ export function ProductsPage() {
       return;
     }
 
+    const selectedSourcingMode = form.sourcingMode as ProductSourcingMode;
     const payload = {
       ...form,
       barcode: form.barcode || null,
@@ -1143,6 +1262,10 @@ export function ProductsPage() {
       brandId: form.brandId || null,
       unitId: form.unitId || null,
       warehouseId: form.warehouseId || null,
+      promoPriceHt: form.promoPriceActive ? Number(form.promoPriceHt || 0) : null,
+      promoPriceTtc: form.promoPriceActive ? Number(form.promoPriceTtc || 0) : null,
+      promoPriceActive: form.promoPriceActive,
+      sourcingMode: selectedSourcingMode,
       variants
     };
 

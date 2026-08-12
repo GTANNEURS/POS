@@ -53,6 +53,9 @@ const productSchema = z.object({
   purchasePriceTtc: z.coerce.number(),
   salePriceHt: z.coerce.number(),
   salePriceTtc: z.coerce.number(),
+  promoPriceHt: z.coerce.number().optional().nullable(),
+  promoPriceTtc: z.coerce.number().optional().nullable(),
+  promoPriceActive: z.coerce.boolean().default(false),
   taxRate: z.coerce.number(),
   stockOnHand: z.coerce.number().int(),
   minStock: z.coerce.number().int(),
@@ -62,7 +65,7 @@ const productSchema = z.object({
   weight: z.string().optional().nullable(),
   isTaxExempt: z.coerce.boolean().default(false),
   isCommissioned: z.coerce.boolean().default(false),
-  sourcingMode: z.enum(["BUY_RESELL", "CONSIGNMENT", "MANUFACTURED"]).default("BUY_RESELL"),
+  sourcingMode: z.enum(["BUY_RESELL", "CONSIGNMENT", "MANUFACTURED"]),
   status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
   variants: z.array(productVariantSchema).default([])
 });
@@ -247,6 +250,9 @@ function toProductCreateData(payload: Omit<ProductPayload, "variants">): Prisma.
     purchasePriceTtc: payload.purchasePriceTtc,
     salePriceHt: payload.salePriceHt,
     salePriceTtc: payload.salePriceTtc,
+    promoPriceHt: payload.promoPriceActive ? payload.promoPriceHt ?? null : null,
+    promoPriceTtc: payload.promoPriceActive ? payload.promoPriceTtc ?? null : null,
+    promoPriceActive: payload.promoPriceActive,
     taxRate: payload.taxRate,
     stockOnHand: payload.stockOnHand,
     minStock: payload.minStock,
@@ -275,6 +281,9 @@ function toProductUpdateData(payload: Partial<Omit<ProductPayload, "variants">>)
   if (payload.purchasePriceTtc !== undefined) data.purchasePriceTtc = payload.purchasePriceTtc;
   if (payload.salePriceHt !== undefined) data.salePriceHt = payload.salePriceHt;
   if (payload.salePriceTtc !== undefined) data.salePriceTtc = payload.salePriceTtc;
+  if (payload.promoPriceHt !== undefined) data.promoPriceHt = payload.promoPriceActive ? payload.promoPriceHt ?? null : null;
+  if (payload.promoPriceTtc !== undefined) data.promoPriceTtc = payload.promoPriceActive ? payload.promoPriceTtc ?? null : null;
+  if (payload.promoPriceActive !== undefined) data.promoPriceActive = payload.promoPriceActive;
   if (payload.taxRate !== undefined) data.taxRate = payload.taxRate;
   if (payload.stockOnHand !== undefined) data.stockOnHand = payload.stockOnHand;
   if (payload.minStock !== undefined) data.minStock = payload.minStock;
@@ -585,6 +594,9 @@ productsRouter.post("/import", requirePermissions("products_manage"), asyncHandl
         purchasePriceTtc: toNumber(pickValue(rawRow, ["purchasepricettc", "achatttc", "prixachatttc"])),
         salePriceHt: toNumber(pickValue(rawRow, ["salepriceht", "venteht", "prixventeht"])),
         salePriceTtc: toNumber(pickValue(rawRow, ["salepricettc", "ventettc", "prixventettc", "prix", "price", "prixvente", "pvttc"])),
+        promoPriceHt: toNumber(pickValue(rawRow, ["promopriceht", "prixpromoht", "prixpromotionht"]), 0) || null,
+        promoPriceTtc: toNumber(pickValue(rawRow, ["promopricettc", "prixpromottc", "prixpromotionttc", "prixpromo"]), 0) || null,
+        promoPriceActive: toBoolean(rawRow.promo ?? rawRow.PROMO ?? pickValue(rawRow, ["promo", "prixpromoactif", "promotion"]), false),
         taxRate: toNumber(pickValue(rawRow, ["taxrate", "tva", "tax"]), 20),
         stockOnHand: toInt(pickValue(rawRow, ["stockonhand", "stock", "qte"])),
         minStock: toInt(pickValue(rawRow, ["minstock", "stockmini", "stockminimum"])),

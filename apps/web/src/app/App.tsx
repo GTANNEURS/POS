@@ -130,6 +130,7 @@ function ProtectedApp() {
         <Route path="/gestion/produits/:id" element={<ProductDetailPage />} />
         <Route path="/gestion/produits/types" element={<ProductsMetaPage entity="types" title="Type article" />} />
         <Route path="/gestion/produits/categories" element={<ProductsMetaPage entity="categories" title="Categorie article" />} />
+        <Route path="/gestion/produits/marques" element={<ProductsMetaPage entity="brands" title="Marques" />} />
         <Route path="/gestion/fournisseurs" element={<SuppliersPage />} />
         <Route path="/gestion/fournisseurs/:id" element={<SupplierDetailPage />} />
         <Route path="/gestion/clients" element={<CustomersPage />} />

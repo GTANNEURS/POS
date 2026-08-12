@@ -46,6 +46,7 @@ const NAVIGATION: Array<NavItem> = [
       { label: "Articles", to: "/gestion/produits", icon: PackageSearch, permission: "products_manage" },
       { label: "Type article", to: "/gestion/produits/types", icon: FileSpreadsheet, permission: "settings_manage" },
       { label: "Categorie article", to: "/gestion/produits/categories", icon: FileSpreadsheet, permission: "settings_manage" },
+      { label: "Marques", to: "/gestion/produits/marques", icon: FileSpreadsheet, permission: "settings_manage" },
       { label: "Fournisseurs", to: "/gestion/fournisseurs", icon: Truck, permission: "suppliers_manage" },
       { label: "Clients", to: "/gestion/clients", icon: UsersRound, permission: "customers_manage" },
       { label: "Transporteurs", to: "/gestion/transporteurs", icon: Truck, permission: "settings_manage" }

@@ -1154,7 +1154,9 @@ posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req
     readVariantStockBalances()
   ]);
 
-  const rows = products.reduce<Array<{ id: string; productId: string; variantId: string | null; name: string; reference: string; barcode: string | null; salePriceTtc: number; stockOnHand: number; color: string | null; size: string | null; imageUrl: string | null }>>((acc, product) => {
+  const rows = products.reduce<Array<{ id: string; productId: string; variantId: string | null; name: string; reference: string; barcode: string | null; salePriceTtc: number; regularSalePriceTtc: number; promoPriceActive: boolean; stockOnHand: number; color: string | null; size: string | null; imageUrl: string | null }>>((acc, product) => {
+    const promoPriceActive = Boolean(product.promoPriceActive && product.promoPriceTtc && Number(product.promoPriceTtc) > 0);
+    const effectiveSalePriceTtc = promoPriceActive ? Number(product.promoPriceTtc) : Number(product.salePriceTtc);
     if (!product.variants.length) {
       const locationStock = queryWarehouseId ? getLocationStock(stockBalances, product.id, queryWarehouseId) : getProductStockTotal(stockBalances, product.id);
       acc.push({
@@ -1164,7 +1166,9 @@ posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req
         name: product.name,
         reference: product.reference,
         barcode: product.barcode,
-        salePriceTtc: Number(product.salePriceTtc),
+        salePriceTtc: effectiveSalePriceTtc,
+        regularSalePriceTtc: Number(product.salePriceTtc),
+        promoPriceActive,
         stockOnHand: locationStock || product.stockOnHand,
         color: null,
         size: null,
@@ -1194,7 +1198,9 @@ posRouter.get("/catalog", requirePermissions("pos_use"), asyncHandler(async (req
           name: [product.name, variant.color, variant.size].filter(Boolean).join(" - "),
           reference: displayReference,
           barcode: variant.barcode ?? product.barcode,
-          salePriceTtc: Number(product.salePriceTtc),
+          salePriceTtc: effectiveSalePriceTtc,
+          regularSalePriceTtc: Number(product.salePriceTtc),
+          promoPriceActive,
           stockOnHand: locationStock || variant.stockOnHand,
           color: variant.color,
           size: variant.size,
@@ -3660,9 +3666,11 @@ posRouter.post("/checkout", requirePermissions("pos_use"), asyncHandler(async (r
         balances = await ensureProductStockSeeded(tx, balances, variant.product, payload.warehouseId);
         variantBalances = await ensureVariantStockSeeded(tx, variantBalances, variant, payload.warehouseId);
         const locationStock = getVariantLocationStock(variantBalances, variant.id, payload.warehouseId);
-        const unitPriceHt = Number(variant.product.salePriceHt);
-        const unitPriceTtc = Number(variant.product.salePriceTtc);
-        const lineTotal = unitPriceTtc * item.quantity - item.discountAmount;
+        const hasPromoPrice = Boolean(variant.product.promoPriceActive && variant.product.promoPriceTtc && Number(variant.product.promoPriceTtc) > 0);
+        const unitPriceTtc = hasPromoPrice ? Number(variant.product.promoPriceTtc) : Number(variant.product.salePriceTtc);
+        const unitPriceHt = hasPromoPrice && variant.product.promoPriceHt ? Number(variant.product.promoPriceHt) : Number((unitPriceTtc / (1 + Number(variant.product.taxRate) / 100)).toFixed(2));
+        const lineDiscount = hasPromoPrice ? 0 : item.discountAmount;
+        const lineTotal = unitPriceTtc * item.quantity - lineDiscount;
         subtotal += unitPriceHt * item.quantity;
         taxAmount += (unitPriceTtc - unitPriceHt) * item.quantity;
         computedItems.push({
@@ -3671,7 +3679,7 @@ posRouter.post("/checkout", requirePermissions("pos_use"), asyncHandler(async (r
           quantity: item.quantity,
           unitPriceHt,
           unitPriceTtc,
-          discountAmount: item.discountAmount,
+          discountAmount: lineDiscount,
           taxRate: Number(variant.product.taxRate),
           lineTotal,
           stockBefore: variant.stockOnHand,
@@ -3687,12 +3695,14 @@ posRouter.post("/checkout", requirePermissions("pos_use"), asyncHandler(async (r
       const product = await tx.product.findUniqueOrThrow({ where: { id: item.productId } });
       balances = await ensureProductStockSeeded(tx, balances, product, payload.warehouseId);
       const locationStock = getLocationStock(balances, product.id, payload.warehouseId);
-      const unitPriceHt = Number(product.salePriceHt);
-      const unitPriceTtc = Number(product.salePriceTtc);
-      const lineTotal = unitPriceTtc * item.quantity - item.discountAmount;
+      const hasPromoPrice = Boolean(product.promoPriceActive && product.promoPriceTtc && Number(product.promoPriceTtc) > 0);
+      const unitPriceTtc = hasPromoPrice ? Number(product.promoPriceTtc) : Number(product.salePriceTtc);
+      const unitPriceHt = hasPromoPrice && product.promoPriceHt ? Number(product.promoPriceHt) : Number((unitPriceTtc / (1 + Number(product.taxRate) / 100)).toFixed(2));
+      const lineDiscount = hasPromoPrice ? 0 : item.discountAmount;
+      const lineTotal = unitPriceTtc * item.quantity - lineDiscount;
       subtotal += unitPriceHt * item.quantity;
       taxAmount += (unitPriceTtc - unitPriceHt) * item.quantity;
-      computedItems.push({ productId: product.id, quantity: item.quantity, unitPriceHt, unitPriceTtc, discountAmount: item.discountAmount, taxRate: Number(product.taxRate), lineTotal, stockBefore: product.stockOnHand, stockAfter: product.stockOnHand - item.quantity, locationStockBefore: locationStock, locationStockAfter: locationStock - item.quantity, stockTracked: true });
+      computedItems.push({ productId: product.id, quantity: item.quantity, unitPriceHt, unitPriceTtc, discountAmount: lineDiscount, taxRate: Number(product.taxRate), lineTotal, stockBefore: product.stockOnHand, stockAfter: product.stockOnHand - item.quantity, locationStockBefore: locationStock, locationStockAfter: locationStock - item.quantity, stockTracked: true });
     }
 
     const shippingFee = Number(payload.shippingFee ?? 0);

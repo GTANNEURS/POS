@@ -3,7 +3,7 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { api } from "../../lib/api";
 import { Button, EmptyState, Field, Input, LoadingBlock, PageHeader, SectionCard, Select } from "../../components/ui/primitives";
 
-type EntityName = "types" | "categories" | "transporters";
+type EntityName = "types" | "categories" | "brands" | "transporters";
 
 type MetaItem = { id: string; name: string };
 type CategoryItem = MetaItem & { typeId?: string | null; type?: { id: string; name: string } | null };
@@ -20,6 +20,7 @@ type MetaPayload = {
 const entityConfig = {
   types: { singular: "Type article", plural: "Types article", button: "Nouveau type" },
   categories: { singular: "Categorie", plural: "Categories", button: "Nouvelle categorie" },
+  brands: { singular: "Marque", plural: "Marques", button: "Nouvelle marque" },
   transporters: { singular: "Transporteur", plural: "Transporteurs", button: "Nouveau transporteur" }
 } as const;
 
@@ -188,8 +189,8 @@ export function ProductsMetaPage({ entity, title }: { entity: EntityName; title:
     <>
       <div className="space-y-6">
         <PageHeader
-          eyebrow={entity === "types" ? "Gestion type d'article" : entity === "categories" ? "Gestion categorie" : "Gestion"}
-          title={entity === "types" || entity === "categories" ? "" : title}
+          eyebrow={entity === "types" ? "Gestion type d'article" : entity === "categories" ? "Gestion categorie" : entity === "brands" ? "Gestion marques" : "Gestion"}
+          title={entity === "types" || entity === "categories" || entity === "brands" ? "" : title}
           actions={
             <>
               <Button variant="secondary" className="!h-9 !px-3.5 !text-[13px]" onClick={() => void load()}>Actualiser</Button>
@@ -202,7 +203,7 @@ export function ProductsMetaPage({ entity, title }: { entity: EntityName; title:
         />
 
         <SectionCard
-          title={entity === "types" || entity === "categories" ? "Liste" : `Liste des ${config.plural.toLowerCase()}`}
+          title={entity === "types" || entity === "categories" || entity === "brands" ? "Liste" : `Liste des ${config.plural.toLowerCase()}`}
           actions={<Input className="w-full min-w-[260px] md:w-[320px]" placeholder={`Rechercher ${config.singular.toLowerCase()}...`} value={search} onChange={(event) => setSearch(event.target.value)} />}
         >
           {error ? <div className="mb-4 rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">{error}</div> : null}
