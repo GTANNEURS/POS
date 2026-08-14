@@ -143,6 +143,13 @@ async function saveJsonSetting<T>(key: string, value: T[]) {
   });
 }
 
+let colorAvailabilityColumnPromise: Promise<unknown> | null = null;
+
+async function ensureColorAvailabilityColumn() {
+  colorAvailabilityColumnPromise ??= prisma.$executeRawUnsafe('ALTER TABLE "Color" ADD COLUMN IF NOT EXISTS "isAvailable" BOOLEAN NOT NULL DEFAULT true');
+  await colorAvailabilityColumnPromise;
+}
+
 function normalizeTypeList(values: string[]) {
   const normalized = values.map((item) => item.trim()).filter(Boolean);
   return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b, "fr"));
@@ -167,6 +174,7 @@ async function saveTypeSetting(key: "color_types" | "size_types", values: string
 }
 
 async function readColorTypes() {
+  await ensureColorAvailabilityColumn();
   const saved = await readTypeSetting("color_types", defaultColorTypes);
   const used = await prisma.color.findMany({ distinct: ["type"], select: { type: true } });
   const merged = normalizeTypeList([...saved, ...used.map((item) => item.type)]);
@@ -208,6 +216,7 @@ function mapSeller(seller: SellerWithRelations) {
 }
 
 async function ensureColorsSeeded() {
+  await ensureColorAvailabilityColumn();
   const count = await prisma.color.count();
   if (count > 0) return;
   const setting = await prisma.setting.findUnique({ where: { key: "product_colors" } });
@@ -494,6 +503,7 @@ settingsRouter.get("/colors", requirePermissions("settings_manage"), asyncHandle
 }));
 
 settingsRouter.post("/colors", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await ensureColorAvailabilityColumn();
   const payload = colorSchema.parse(req.body);
   const exists = await prisma.color.findUnique({ where: { reference: payload.reference } });
   if (exists) throw new AppError("Une couleur existe deja avec cette reference.", 409);
@@ -503,6 +513,7 @@ settingsRouter.post("/colors", requirePermissions("settings_manage"), asyncHandl
 }));
 
 settingsRouter.put("/colors/:id", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  await ensureColorAvailabilityColumn();
   const id = String(req.params.id);
   const payload = colorSchema.parse(req.body);
   const duplicate = await prisma.color.findUnique({ where: { reference: payload.reference } });
