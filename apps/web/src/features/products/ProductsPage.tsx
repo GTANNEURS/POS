@@ -6,7 +6,7 @@ import { cleanDisplayText, cleanWarehouseName, formatCurrency, formatNumber } fr
 import { Badge, Button, EmptyState, Field, Input, LoadingBlock, PageHeader, SectionCard, Select, Textarea } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
 
-type ProductColor = { id: string; reference: string; name: string; type: string };
+type ProductColor = { id: string; reference: string; name: string; type: string; isAvailable?: boolean };
 type ProductSize = { id: string; reference: string; name: string; type: string };
 
 type ProductVariant = {
@@ -377,6 +377,7 @@ function ProductModal({
   const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
   const [selectedSizeIds, setSelectedSizeIds] = useState<string[]>([]);
   const [selectedColorType, setSelectedColorType] = useState("");
+  const [colorSearch, setColorSearch] = useState("");
   const [selectedSizeType, setSelectedSizeType] = useState("");
   const [photoProcessing, setPhotoProcessing] = useState(false);
   const [photoMessage, setPhotoMessage] = useState<string | null>(null);
@@ -387,6 +388,7 @@ function ProductModal({
     setSelectedColorIds([]);
     setSelectedSizeIds([]);
     setSelectedColorType("");
+    setColorSearch("");
     setSelectedSizeType("");
     setPhotoProcessing(false);
     setPhotoMessage(null);
@@ -439,7 +441,12 @@ function ProductModal({
   const filteredCategories = (meta?.categories ?? []).filter((item) => !form.typeId || item.typeId === form.typeId);
   const colorTypes = Array.from(new Set((meta?.colors ?? []).map((item) => item.type).filter(Boolean))).sort();
   const sizeTypes = Array.from(new Set((meta?.sizes ?? []).map((item) => item.type).filter(Boolean))).sort();
-  const filteredColors = (meta?.colors ?? []).filter((item) => !selectedColorType || item.type === selectedColorType);
+  const normalizedColorSearch = colorSearch.trim().toLowerCase();
+  const filteredColors = (meta?.colors ?? []).filter((item) => {
+    const matchesType = !selectedColorType || item.type === selectedColorType;
+    const haystack = [item.reference, item.name, item.type].join(" ").toLowerCase();
+    return matchesType && (!normalizedColorSearch || haystack.includes(normalizedColorSearch));
+  });
   const filteredSizes = (meta?.sizes ?? []).filter((item) => !selectedSizeType || item.type === selectedSizeType);
 
   const parseMoney = (value: string) => {
@@ -821,27 +828,38 @@ function ProductModal({
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                     <div className="space-y-1.5">
                       <div className="product-variant-kicker text-xs font-semibold uppercase tracking-[0.22em] text-orange-200/80">Couleurs</div>
-                      <Select value={selectedColorType} onChange={(event) => {
-                        const nextType = event.target.value;
-                        setSelectedColorType(nextType);
-                        setSelectedColorIds((current) => current.filter((id) => (meta?.colors ?? []).some((item) => item.id === id && (!nextType || item.type === nextType))));
-                      }} className="!h-10 !border-white/12 !bg-black/35 !text-sm !text-[#f4e8dc]">
-                        <option value="">Tous les types</option>
-                        {colorTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-                      </Select>
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+                        <Select value={selectedColorType} onChange={(event) => setSelectedColorType(event.target.value)} className="!h-10 !border-white/12 !bg-black/35 !text-sm !text-[#f4e8dc]">
+                          <option value="">Tous les types</option>
+                          {colorTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                        </Select>
+                        <Input value={colorSearch} onChange={(event) => setColorSearch(event.target.value)} placeholder="Recherche couleur ou reference..." className="!h-10 !border-white/12 !bg-black/35 !text-sm !text-[#f4e8dc]" />
+                      </div>
                        <details className="product-variant-picker group rounded-[18px] border border-white/10 bg-black/28">
                         <summary className="product-variant-summary flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-white">
                           <span className="min-w-0 truncate">{selectedColorLabel}</span>
                           <span className="shrink-0 rounded-full border border-orange-300/20 bg-orange-300/10 px-2 py-0.5 text-[11px] text-orange-100">{selectedColors.length}</span>
                         </summary>
                         <div className="max-h-[260px] space-y-1 overflow-y-auto border-t border-white/10 p-2">
+                          {selectedColors.length ? (
+                            <div className="mb-2 rounded-[14px] border border-white/10 bg-white/[0.035] p-2">
+                              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#baa999]">Couleurs deja selectionnees</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {selectedColors.map((color) => (
+                                  <button key={color.id} type="button" className="rounded-full border border-orange-300/25 bg-orange-300/10 px-2 py-1 text-[10px] font-semibold text-orange-100 transition hover:bg-orange-300/18" onClick={() => setSelectedColorIds((current) => current.filter((id) => id !== color.id))}>
+                                    {color.reference ? `${color.reference} - ` : ""}{color.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                           {filteredColors.length ? (
                             <button
                               type="button"
                               className="mb-1 w-full rounded-[14px] border border-orange-300/25 bg-orange-300/10 px-3 py-2 text-left text-xs font-semibold text-orange-100 transition hover:bg-orange-300/16"
                               onClick={toggleAllFilteredColors}
                             >
-                              {allFilteredColorsSelected ? "Tout deselectionner" : "Selectionner toutes les couleurs"}
+                              {allFilteredColorsSelected ? "Tout deselectionner dans cette vue" : "Selectionner les couleurs affichees"}
                             </button>
                           ) : null}
                           {filteredColors.map((color) => (
@@ -852,11 +870,14 @@ function ProductModal({
                                   <span className="block truncate font-medium text-white">{color.name}</span>
                                   <span className="text-xs text-[#baa999]">{color.type}</span>
                                 </span>
-                                <span className="shrink-0 rounded-full border border-orange-300/25 bg-orange-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-100">{color.reference || "-"}</span>
+                                <span className="flex shrink-0 flex-col items-end gap-1">
+                                  <span className="rounded-full border border-orange-300/25 bg-orange-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-100">{color.reference || "-"}</span>
+                                  {color.isAvailable === false ? <span className="rounded-full border border-red-300/25 bg-red-400/10 px-2 py-0.5 text-[10px] font-semibold text-red-100">Rupture</span> : null}
+                                </span>
                               </span>
                             </label>
                           ))}
-                          {!filteredColors.length ? <div className="px-3 py-2 text-xs text-[#baa999]">Aucune couleur pour ce type.</div> : null}
+                          {!filteredColors.length ? <div className="px-3 py-2 text-xs text-[#baa999]">Aucune couleur trouvee pour ce type ou cette recherche.</div> : null}
                         </div>
                       </details>
                     </div>
