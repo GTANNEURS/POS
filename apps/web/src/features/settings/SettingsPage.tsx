@@ -25,7 +25,7 @@ type SellerOption = { id: string; fullName: string };
 type BoutiqueRow = { id: string; name: string; address: string; phone: string; managerName: string; sellerNames: string[]; ticketPrefix: string };
 type BoutiqueOption = { id: string; name: string };
 type CategoryOption = { id: string; name: string; typeId: string | null; typeName: string };
-type ColorRow = { id: string; reference: string; name: string; type: string };
+type ColorRow = { id: string; reference: string; name: string; type: string; isAvailable: boolean };
 type SizeRow = { id: string; name: string; type: string };
 type CurrencyRow = { id: string; code: string; name: string; symbol: string | null; rateFromMad: number; rateMode: "MANUAL" | "AUTO"; isBase: boolean; isActive: boolean };
 type PaymentMethodRow = { id: string; code: string; label: string; isActive: boolean };
@@ -34,11 +34,13 @@ type BoutiquesPayload = { boutiques: BoutiqueRow[]; sellers: SellerOption[] };
 type SellersPayload = { sellers: SellerRow[]; boutiques: BoutiqueOption[]; categories: CategoryOption[] };
 type ColorsPayload = { colors: ColorRow[]; types: string[] };
 type SizesPayload = { sizes: SizeRow[]; types: string[] };
+type TypeListPayload = { types: string[] };
 type CurrenciesPayload = { baseCurrency: "MAD"; currencies: CurrencyRow[] };
 type PaymentMethodsPayload = { paymentMethods: PaymentMethodRow[] };
 type UsersPayload = { users: UserRow[]; roles: Role[]; permissions: Permission[]; warehouses: BoutiqueOption[] };
 type PosBootstrapPayload = { warehouses: Array<{ id: string; name: string; type?: string }>; sellers: SellerOption[] };
 type SettingsTab = "societe" | "tickets" | "boutique" | "utilisateurs" | "vendeurs" | "couleurs" | "tailles" | "devises" | "paiements";
+type ReferenceSubTab = "elements" | "types";
 type UserDetailTab = "infos" | "droits";
 type TicketPrintType = "cash" | "reprint" | "detax" | "gift" | "credit";
 type TicketPrintProfile = {
@@ -529,12 +531,20 @@ export function SettingsPage() {
   const [colorTypes, setColorTypes] = useState<string[]>(["Maroquinerie", "Chaussure", "Vetement"]);
   const [editingColorId, setEditingColorId] = useState<string | null>(null);
   const [newColorOpen, setNewColorOpen] = useState(false);
-  const [newColor, setNewColor] = useState({ reference: "", name: "", type: "Maroquinerie" });
+  const [newColor, setNewColor] = useState({ reference: "", name: "", type: "Maroquinerie", isAvailable: true });
+  const [colorSubTab, setColorSubTab] = useState<ReferenceSubTab>("elements");
+  const [newColorType, setNewColorType] = useState("");
+  const [editingColorType, setEditingColorType] = useState<string | null>(null);
+  const [colorTypeDraft, setColorTypeDraft] = useState("");
   const [sizes, setSizes] = useState<SizeRow[]>([]);
   const [sizeTypes, setSizeTypes] = useState<string[]>(["Chaussure femme", "Chaussure homme", "Sportswear", "Vetement femme", "Vetement homme", "Size"]);
   const [editingSizeId, setEditingSizeId] = useState<string | null>(null);
   const [newSizeOpen, setNewSizeOpen] = useState(false);
   const [newSize, setNewSize] = useState({ name: "", type: "Size" });
+  const [sizeSubTab, setSizeSubTab] = useState<ReferenceSubTab>("elements");
+  const [newSizeType, setNewSizeType] = useState("");
+  const [editingSizeType, setEditingSizeType] = useState<string | null>(null);
+  const [sizeTypeDraft, setSizeTypeDraft] = useState("");
   const [currencies, setCurrencies] = useState<CurrencyRow[]>([]);
   const [editingCurrencyId, setEditingCurrencyId] = useState<string | null>(null);
   const [newCurrencyOpen, setNewCurrencyOpen] = useState(false);
@@ -1116,7 +1126,7 @@ export function SettingsPage() {
     try {
       const created = await api<ColorRow>("/settings/colors", { method: "POST", body: JSON.stringify(newColor) });
       setColors((current) => [...current, created]);
-      setNewColor({ reference: "", name: "", type: colorTypes[0] ?? "Maroquinerie" });
+      setNewColor({ reference: "", name: "", type: colorTypes[0] ?? "Maroquinerie", isAvailable: true });
       setNewColorOpen(false);
       setMessage("Couleur creee.");
     } catch (err) {
@@ -1130,7 +1140,7 @@ export function SettingsPage() {
     setSaving(true);
     setMessage(null);
     try {
-      const updated = await api<ColorRow>(`/settings/colors/${color.id}`, { method: "PUT", body: JSON.stringify({ reference: color.reference, name: color.name, type: color.type }) });
+      const updated = await api<ColorRow>(`/settings/colors/${color.id}`, { method: "PUT", body: JSON.stringify({ reference: color.reference, name: color.name, type: color.type, isAvailable: color.isAvailable }) });
       setColors((current) => current.map((item) => item.id === updated.id ? updated : item));
       setEditingColorId(null);
       setMessage("Couleur mise a jour.");
@@ -1151,6 +1161,55 @@ export function SettingsPage() {
       setMessage("Couleur supprimee.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Suppression couleur impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createColorType(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      const payload = await api<TypeListPayload>("/settings/color-types", { method: "POST", body: JSON.stringify({ name: newColorType }) });
+      setColorTypes(payload.types);
+      setNewColorType("");
+      setMessage("Type couleur cree.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Creation type couleur impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveColorType(type: string) {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const nextName = colorTypeDraft.trim();
+      const payload = await api<TypeListPayload>(`/settings/color-types/${encodeURIComponent(type)}`, { method: "PUT", body: JSON.stringify({ name: nextName }) });
+      setColorTypes(payload.types);
+      setColors((current) => current.map((color) => color.type === type ? { ...color, type: nextName } : color));
+      setEditingColorType(null);
+      setColorTypeDraft("");
+      setMessage("Type couleur mis a jour.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Mise a jour type couleur impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteColorType(type: string) {
+    if (!window.confirm(`Supprimer le type couleur ${type} ?`)) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const payload = await api<TypeListPayload>(`/settings/color-types/${encodeURIComponent(type)}`, { method: "DELETE" });
+      setColorTypes(payload.types);
+      setMessage("Type couleur supprime.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Suppression type couleur impossible.");
     } finally {
       setSaving(false);
     }
@@ -1202,6 +1261,55 @@ export function SettingsPage() {
       setMessage("Taille supprimee.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Suppression taille impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createSizeType(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      const payload = await api<TypeListPayload>("/settings/size-types", { method: "POST", body: JSON.stringify({ name: newSizeType }) });
+      setSizeTypes(payload.types);
+      setNewSizeType("");
+      setMessage("Type taille cree.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Creation type taille impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveSizeType(type: string) {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const nextName = sizeTypeDraft.trim();
+      const payload = await api<TypeListPayload>(`/settings/size-types/${encodeURIComponent(type)}`, { method: "PUT", body: JSON.stringify({ name: nextName }) });
+      setSizeTypes(payload.types);
+      setSizes((current) => current.map((size) => size.type === type ? { ...size, type: nextName } : size));
+      setEditingSizeType(null);
+      setSizeTypeDraft("");
+      setMessage("Type taille mis a jour.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Mise a jour type taille impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteSizeType(type: string) {
+    if (!window.confirm(`Supprimer le type taille ${type} ?`)) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const payload = await api<TypeListPayload>(`/settings/size-types/${encodeURIComponent(type)}`, { method: "DELETE" });
+      setSizeTypes(payload.types);
+      setMessage("Type taille supprime.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Suppression type taille impossible.");
     } finally {
       setSaving(false);
     }
@@ -2111,55 +2219,100 @@ export function SettingsPage() {
       ) : null}
 
       {activeTab === "couleurs" ? (
-        <SectionCard title="Couleurs" actions={<Button className="!px-3 !py-2 text-xs" type="button" onClick={() => setNewColorOpen((current) => !current)}>{newColorOpen ? "Fermer" : "Ajouter couleur"}</Button>}>
-          {newColorOpen ? (
-            <form className="mb-5 rounded-[26px] border border-orange-300/20 bg-orange-300/10 p-4" onSubmit={createColor}>
-              <div className="grid items-end gap-3 md:grid-cols-3">
-                <Field label="Code"><Input value={newColor.reference} onChange={(e) => setNewColor((current) => ({ ...current, reference: e.target.value }))} required /></Field>
-                <Field label="Couleur"><Input value={newColor.name} onChange={(e) => setNewColor((current) => ({ ...current, name: e.target.value }))} required /></Field>
-                <Field label="Type"><select className="input-base" value={newColor.type} onChange={(e) => setNewColor((current) => ({ ...current, type: e.target.value }))}>{colorTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
-              </div>
-              <Button className="mt-4 !px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Enregistrer"}</Button>
-            </form>
-          ) : null}
-          <div className="overflow-hidden rounded-[24px] border border-white/10">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-white/5 text-xs uppercase tracking-[0.22em] text-[#d9c5b1]"><tr><th className="px-4 py-3">Code</th><th className="px-4 py-3">Couleur</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
-              <tbody className="divide-y divide-white/10">
-                {colors.map((color) => {
-                  const editing = editingColorId === color.id;
-                  return <tr key={color.id} className="transition hover:bg-white/5"><td className="px-4 py-3">{editing ? <Input value={color.reference} onChange={(e) => updateColor(color.id, { reference: e.target.value })} /> : <span className="font-semibold text-white">{color.reference}</span>}</td><td className="px-4 py-3">{editing ? <Input value={color.name} onChange={(e) => updateColor(color.id, { name: e.target.value })} /> : <span className="text-[#eadccf]">{color.name}</span>}</td><td className="px-4 py-3">{editing ? <select className="input-base" value={color.type} onChange={(e) => updateColor(color.id, { type: e.target.value })}>{colorTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select> : <span className="badge">{color.type}</span>}</td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2">{editing ? <Button className="!px-3 !py-2 text-xs" type="button" onClick={() => void saveColor(color)}>Sauvegarder</Button> : <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => setEditingColorId(color.id)}>Modifier</Button>}<Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void deleteColor(color)}>Supprimer</Button></div></td></tr>;
-                })}
-              </tbody>
-            </table>
-            {!colors.length ? <div className="p-6 text-center text-sm text-[#d8cabc]">Aucune couleur trouvee.</div> : null}
+        <div className="grid gap-5">
+          <div className="flex flex-wrap gap-2 rounded-[24px] border border-white/10 bg-black/20 p-2">
+            <button type="button" className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${colorSubTab === "elements" ? "bg-orange-300 text-[#28170e] shadow-[0_14px_30px_rgba(255,140,35,0.22)]" : "text-[#eadccf] hover:bg-white/10"}`} onClick={() => setColorSubTab("elements")}>Couleurs</button>
+            <button type="button" className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${colorSubTab === "types" ? "bg-orange-300 text-[#28170e] shadow-[0_14px_30px_rgba(255,140,35,0.22)]" : "text-[#eadccf] hover:bg-white/10"}`} onClick={() => setColorSubTab("types")}>Types couleurs</button>
           </div>
-        </SectionCard>
+          {colorSubTab === "elements" ? (
+            <SectionCard title="Couleurs" actions={<Button className="!px-3 !py-2 text-xs" type="button" onClick={() => setNewColorOpen((current) => !current)}>{newColorOpen ? "Fermer" : "Ajouter couleur"}</Button>}>
+              {newColorOpen ? (
+                <form className="mb-5 rounded-[26px] border border-orange-300/20 bg-orange-300/10 p-4" onSubmit={createColor}>
+                  <div className="grid items-end gap-3 md:grid-cols-4">
+                    <Field label="Code"><Input value={newColor.reference} onChange={(e) => setNewColor((current) => ({ ...current, reference: e.target.value }))} required /></Field>
+                    <Field label="Couleur"><Input value={newColor.name} onChange={(e) => setNewColor((current) => ({ ...current, name: e.target.value }))} required /></Field>
+                    <Field label="Type"><select className="input-base" value={newColor.type} onChange={(e) => setNewColor((current) => ({ ...current, type: e.target.value }))}>{colorTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
+                    <label className="inline-flex h-12 items-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 text-sm font-semibold text-[#eadccf]"><input type="checkbox" checked={newColor.isAvailable} onChange={(e) => setNewColor((current) => ({ ...current, isAvailable: e.target.checked }))} /> Disponible</label>
+                  </div>
+                  <Button className="mt-4 !px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Enregistrer"}</Button>
+                </form>
+              ) : null}
+              <div className="overflow-hidden rounded-[24px] border border-white/10">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-white/5 text-xs uppercase tracking-[0.22em] text-[#d9c5b1]"><tr><th className="px-4 py-3">Code</th><th className="px-4 py-3">Couleur</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Statut</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                  <tbody className="divide-y divide-white/10">
+                    {colors.map((color) => {
+                      const editing = editingColorId === color.id;
+                      return <tr key={color.id} className="transition hover:bg-white/5"><td className="px-4 py-3">{editing ? <Input value={color.reference} onChange={(e) => updateColor(color.id, { reference: e.target.value })} /> : <span className="font-semibold text-white">{color.reference}</span>}</td><td className="px-4 py-3">{editing ? <Input value={color.name} onChange={(e) => updateColor(color.id, { name: e.target.value })} /> : <span className="text-[#eadccf]">{color.name}</span>}</td><td className="px-4 py-3">{editing ? <select className="input-base" value={color.type} onChange={(e) => updateColor(color.id, { type: e.target.value })}>{colorTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select> : <span className="badge">{color.type}</span>}</td><td className="px-4 py-3">{editing ? <select className="input-base" value={color.isAvailable ? "available" : "out"} onChange={(e) => updateColor(color.id, { isAvailable: e.target.value === "available" })}><option value="available">Disponible</option><option value="out">Rupture</option></select> : <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${color.isAvailable ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-100" : "border-red-300/30 bg-red-400/15 text-red-100"}`}>{color.isAvailable ? "Disponible" : "Rupture"}</span>}</td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2">{editing ? <Button className="!px-3 !py-2 text-xs" type="button" onClick={() => void saveColor(color)}>Sauvegarder</Button> : <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => setEditingColorId(color.id)}>Modifier</Button>}<Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void deleteColor(color)}>Supprimer</Button></div></td></tr>;
+                    })}
+                  </tbody>
+                </table>
+                {!colors.length ? <div className="p-6 text-center text-sm text-[#d8cabc]">Aucune couleur trouvee.</div> : null}
+              </div>
+            </SectionCard>
+          ) : (
+            <SectionCard title="Types couleurs">
+              <form className="mb-5 grid items-end gap-3 rounded-[26px] border border-orange-300/20 bg-orange-300/10 p-4 md:grid-cols-[1fr_auto]" onSubmit={createColorType}>
+                <Field label="Nouveau type couleur"><Input value={newColorType} onChange={(e) => setNewColorType(e.target.value)} placeholder="Ex: Cuir, Textile, Accessoire..." required /></Field>
+                <Button className="!px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Ajouter type"}</Button>
+              </form>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {colorTypes.map((type) => {
+                  const editing = editingColorType === type;
+                  const usedCount = colors.filter((color) => color.type === type).length;
+                  return <div key={type} className="rounded-[22px] border border-white/10 bg-black/20 p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-[#bba896]">Type couleur</p>{editing ? <Input className="mt-3" value={colorTypeDraft} onChange={(e) => setColorTypeDraft(e.target.value)} /> : <p className="mt-2 text-lg font-semibold text-white">{type}</p>}<p className="mt-1 text-xs text-[#cbb9a8]">{usedCount} couleur(s) liee(s)</p><div className="mt-4 flex flex-wrap gap-2">{editing ? <Button className="!px-3 !py-2 text-xs" type="button" onClick={() => void saveColorType(type)}>Sauvegarder</Button> : <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => { setEditingColorType(type); setColorTypeDraft(type); }}>Modifier</Button>}<Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void deleteColorType(type)}>Supprimer</Button></div></div>;
+                })}
+              </div>
+            </SectionCard>
+          )}
+        </div>
       ) : null}
       {activeTab === "tailles" ? (
-        <SectionCard title="Tailles" actions={<Button className="!px-3 !py-2 text-xs" type="button" onClick={() => setNewSizeOpen((current) => !current)}>{newSizeOpen ? "Fermer" : "Ajouter taille"}</Button>}>
-          {newSizeOpen ? (
-            <form className="mb-5 rounded-[26px] border border-orange-300/20 bg-orange-300/10 p-4" onSubmit={createSize}>
-              <div className="grid items-end gap-3 md:grid-cols-2">
-                <Field label="Taille"><Input value={newSize.name} onChange={(e) => setNewSize((current) => ({ ...current, name: e.target.value }))} required /></Field>
-                <Field label="Type"><select className="input-base" value={newSize.type} onChange={(e) => setNewSize((current) => ({ ...current, type: e.target.value }))}>{sizeTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
-              </div>
-              <Button className="mt-4 !px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Enregistrer"}</Button>
-            </form>
-          ) : null}
-          <div className="overflow-hidden rounded-[24px] border border-white/10">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-white/5 text-xs uppercase tracking-[0.22em] text-[#d9c5b1]"><tr><th className="px-4 py-3">Taille</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
-              <tbody className="divide-y divide-white/10">
-                {sizes.map((size) => {
-                  const editing = editingSizeId === size.id;
-                  return <tr key={size.id} className="transition hover:bg-white/5"><td className="px-4 py-3">{editing ? <Input value={size.name} onChange={(e) => updateSize(size.id, { name: e.target.value })} /> : <span className="font-semibold text-white">{size.name}</span>}</td><td className="px-4 py-3">{editing ? <select className="input-base" value={size.type} onChange={(e) => updateSize(size.id, { type: e.target.value })}>{sizeTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select> : <span className="badge">{size.type}</span>}</td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2">{editing ? <Button className="!px-3 !py-2 text-xs" type="button" onClick={() => void saveSize(size)}>Sauvegarder</Button> : <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => setEditingSizeId(size.id)}>Modifier</Button>}<Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void deleteSize(size)}>Supprimer</Button></div></td></tr>;
-                })}
-              </tbody>
-            </table>
-            {!sizes.length ? <div className="p-6 text-center text-sm text-[#d8cabc]">Aucune taille trouvee.</div> : null}
+        <div className="grid gap-5">
+          <div className="flex flex-wrap gap-2 rounded-[24px] border border-white/10 bg-black/20 p-2">
+            <button type="button" className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${sizeSubTab === "elements" ? "bg-orange-300 text-[#28170e] shadow-[0_14px_30px_rgba(255,140,35,0.22)]" : "text-[#eadccf] hover:bg-white/10"}`} onClick={() => setSizeSubTab("elements")}>Tailles</button>
+            <button type="button" className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${sizeSubTab === "types" ? "bg-orange-300 text-[#28170e] shadow-[0_14px_30px_rgba(255,140,35,0.22)]" : "text-[#eadccf] hover:bg-white/10"}`} onClick={() => setSizeSubTab("types")}>Types tailles</button>
           </div>
-        </SectionCard>
+          {sizeSubTab === "elements" ? (
+            <SectionCard title="Tailles" actions={<Button className="!px-3 !py-2 text-xs" type="button" onClick={() => setNewSizeOpen((current) => !current)}>{newSizeOpen ? "Fermer" : "Ajouter taille"}</Button>}>
+              {newSizeOpen ? (
+                <form className="mb-5 rounded-[26px] border border-orange-300/20 bg-orange-300/10 p-4" onSubmit={createSize}>
+                  <div className="grid items-end gap-3 md:grid-cols-2">
+                    <Field label="Taille"><Input value={newSize.name} onChange={(e) => setNewSize((current) => ({ ...current, name: e.target.value }))} required /></Field>
+                    <Field label="Type"><select className="input-base" value={newSize.type} onChange={(e) => setNewSize((current) => ({ ...current, type: e.target.value }))}>{sizeTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
+                  </div>
+                  <Button className="mt-4 !px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Enregistrer"}</Button>
+                </form>
+              ) : null}
+              <div className="overflow-hidden rounded-[24px] border border-white/10">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-white/5 text-xs uppercase tracking-[0.22em] text-[#d9c5b1]"><tr><th className="px-4 py-3">Taille</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                  <tbody className="divide-y divide-white/10">
+                    {sizes.map((size) => {
+                      const editing = editingSizeId === size.id;
+                      return <tr key={size.id} className="transition hover:bg-white/5"><td className="px-4 py-3">{editing ? <Input value={size.name} onChange={(e) => updateSize(size.id, { name: e.target.value })} /> : <span className="font-semibold text-white">{size.name}</span>}</td><td className="px-4 py-3">{editing ? <select className="input-base" value={size.type} onChange={(e) => updateSize(size.id, { type: e.target.value })}>{sizeTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select> : <span className="badge">{size.type}</span>}</td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2">{editing ? <Button className="!px-3 !py-2 text-xs" type="button" onClick={() => void saveSize(size)}>Sauvegarder</Button> : <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => setEditingSizeId(size.id)}>Modifier</Button>}<Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void deleteSize(size)}>Supprimer</Button></div></td></tr>;
+                    })}
+                  </tbody>
+                </table>
+                {!sizes.length ? <div className="p-6 text-center text-sm text-[#d8cabc]">Aucune taille trouvee.</div> : null}
+              </div>
+            </SectionCard>
+          ) : (
+            <SectionCard title="Types tailles">
+              <form className="mb-5 grid items-end gap-3 rounded-[26px] border border-orange-300/20 bg-orange-300/10 p-4 md:grid-cols-[1fr_auto]" onSubmit={createSizeType}>
+                <Field label="Nouveau type taille"><Input value={newSizeType} onChange={(e) => setNewSizeType(e.target.value)} placeholder="Ex: Chaussure enfant, Vetement..." required /></Field>
+                <Button className="!px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Ajouter type"}</Button>
+              </form>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {sizeTypes.map((type) => {
+                  const editing = editingSizeType === type;
+                  const usedCount = sizes.filter((size) => size.type === type).length;
+                  return <div key={type} className="rounded-[22px] border border-white/10 bg-black/20 p-4"><p className="text-[11px] uppercase tracking-[0.22em] text-[#bba896]">Type taille</p>{editing ? <Input className="mt-3" value={sizeTypeDraft} onChange={(e) => setSizeTypeDraft(e.target.value)} /> : <p className="mt-2 text-lg font-semibold text-white">{type}</p>}<p className="mt-1 text-xs text-[#cbb9a8]">{usedCount} taille(s) liee(s)</p><div className="mt-4 flex flex-wrap gap-2">{editing ? <Button className="!px-3 !py-2 text-xs" type="button" onClick={() => void saveSizeType(type)}>Sauvegarder</Button> : <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => { setEditingSizeType(type); setSizeTypeDraft(type); }}>Modifier</Button>}<Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void deleteSizeType(type)}>Supprimer</Button></div></div>;
+                })}
+              </div>
+            </SectionCard>
+          )}
+        </div>
       ) : null}
       {activeTab === "devises" ? (
         <div className="grid gap-5">

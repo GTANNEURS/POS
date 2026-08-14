@@ -6,8 +6,8 @@ import { asyncHandler, AppError, ok } from "../../common/http.js";
 import { authenticate, type AuthenticatedRequest, requirePermissions } from "../../common/auth.js";
 import { writeAuditLog } from "../../common/audit.js";
 
-const colorTypes = ["Maroquinerie", "Chaussure", "Vetement"];
-const sizeTypes = ["Chaussure femme", "Chaussure homme", "Sportswear", "Vetement femme", "Vetement homme", "Size"];
+const defaultColorTypes = ["Maroquinerie", "Chaussure", "Vetement"];
+const defaultSizeTypes = ["Chaussure femme", "Chaussure homme", "Sportswear", "Vetement femme", "Vetement homme", "Size"];
 const defaultPaymentMethods = [
   { id: "cash", code: "CASH", label: "Especes", isActive: true },
   { id: "card", code: "CARD", label: "Carte", isActive: true },
@@ -22,12 +22,17 @@ const defaultPaymentMethods = [
 const colorSchema = z.object({
   reference: z.string().min(1),
   name: z.string().min(2),
-  type: z.string().min(2)
+  type: z.string().min(2),
+  isAvailable: z.boolean().default(true)
 });
 
 const sizeSchema = z.object({
   name: z.string().min(1),
   type: z.string().min(2)
+});
+
+const typeNameSchema = z.object({
+  name: z.string().min(2)
 });
 
 
@@ -136,6 +141,45 @@ async function saveJsonSetting<T>(key: string, value: T[]) {
     update: { value: jsonValue },
     create: { key, value: jsonValue }
   });
+}
+
+function normalizeTypeList(values: string[]) {
+  const normalized = values.map((item) => item.trim()).filter(Boolean);
+  return Array.from(new Set(normalized)).sort((a, b) => a.localeCompare(b, "fr"));
+}
+
+async function readTypeSetting(key: "color_types" | "size_types", defaults: string[]) {
+  const setting = await prisma.setting.findUnique({ where: { key } });
+  const values = Array.isArray(setting?.value)
+    ? (setting.value as unknown[]).map((item) => String(item ?? ""))
+    : [];
+  const normalized = Array.isArray(setting?.value) ? normalizeTypeList(values) : normalizeTypeList(defaults);
+  if (!Array.isArray(setting?.value)) {
+    await saveJsonSetting(key, normalized);
+  }
+  return normalized;
+}
+
+async function saveTypeSetting(key: "color_types" | "size_types", values: string[]) {
+  const normalized = normalizeTypeList(values);
+  await saveJsonSetting(key, normalized);
+  return normalized;
+}
+
+async function readColorTypes() {
+  const saved = await readTypeSetting("color_types", defaultColorTypes);
+  const used = await prisma.color.findMany({ distinct: ["type"], select: { type: true } });
+  const merged = normalizeTypeList([...saved, ...used.map((item) => item.type)]);
+  if (merged.join("|") !== saved.join("|")) await saveJsonSetting("color_types", merged);
+  return merged;
+}
+
+async function readSizeTypes() {
+  const saved = await readTypeSetting("size_types", defaultSizeTypes);
+  const used = await prisma.size.findMany({ distinct: ["type"], select: { type: true } });
+  const merged = normalizeTypeList([...saved, ...used.map((item) => item.type)]);
+  if (merged.join("|") !== saved.join("|")) await saveJsonSetting("size_types", merged);
+  return merged;
 }
 
 async function findSellers() {
@@ -442,8 +486,11 @@ settingsRouter.delete("/payment-methods/:id", requirePermissions("settings_manag
 }));
 settingsRouter.get("/colors", requirePermissions("settings_manage"), asyncHandler(async (_req, res) => {
   await ensureColorsSeeded();
-  const colors = await prisma.color.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] });
-  return ok(res, { colors, types: colorTypes });
+  const [colors, types] = await Promise.all([
+    prisma.color.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
+    readColorTypes()
+  ]);
+  return ok(res, { colors, types });
 }));
 
 settingsRouter.post("/colors", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -472,10 +519,45 @@ settingsRouter.delete("/colors/:id", requirePermissions("settings_manage"), asyn
   return ok(res, true, "Couleur supprimee.");
 }));
 
+settingsRouter.post("/color-types", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const payload = typeNameSchema.parse(req.body);
+  const current = await readColorTypes();
+  if (current.some((type) => type.toLowerCase() === payload.name.trim().toLowerCase())) throw new AppError("Ce type couleur existe deja.", 409);
+  const types = await saveTypeSetting("color_types", [...current, payload.name.trim()]);
+  await writeAuditLog({ userId: req.currentUser?.id, action: "settings.color_types.create", entityType: "setting", meta: payload });
+  return ok(res, { types }, "Type couleur cree.");
+}));
+
+settingsRouter.put("/color-types/:name", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const currentName = decodeURIComponent(String(req.params.name));
+  const payload = typeNameSchema.parse(req.body);
+  const nextName = payload.name.trim();
+  const current = await readColorTypes();
+  if (!current.includes(currentName)) throw new AppError("Type couleur introuvable.", 404);
+  if (current.some((type) => type !== currentName && type.toLowerCase() === nextName.toLowerCase())) throw new AppError("Ce type couleur existe deja.", 409);
+  await prisma.color.updateMany({ where: { type: currentName }, data: { type: nextName } });
+  const types = await saveTypeSetting("color_types", current.map((type) => type === currentName ? nextName : type));
+  await writeAuditLog({ userId: req.currentUser?.id, action: "settings.color_types.update", entityType: "setting", meta: { from: currentName, to: nextName } });
+  return ok(res, { types }, "Type couleur mis a jour.");
+}));
+
+settingsRouter.delete("/color-types/:name", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const name = decodeURIComponent(String(req.params.name));
+  const used = await prisma.color.count({ where: { type: name } });
+  if (used > 0) throw new AppError("Impossible de supprimer ce type car il est utilise par des couleurs.", 409);
+  const current = await readColorTypes();
+  const types = await saveTypeSetting("color_types", current.filter((type) => type !== name));
+  await writeAuditLog({ userId: req.currentUser?.id, action: "settings.color_types.delete", entityType: "setting", meta: { name } });
+  return ok(res, { types }, "Type couleur supprime.");
+}));
+
 settingsRouter.get("/sizes", requirePermissions("settings_manage"), asyncHandler(async (_req, res) => {
   await ensureSizesSeeded();
-  const sizes = await prisma.size.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] });
-  return ok(res, { sizes, types: sizeTypes });
+  const [sizes, types] = await Promise.all([
+    prisma.size.findMany({ orderBy: [{ type: "asc" }, { name: "asc" }] }),
+    readSizeTypes()
+  ]);
+  return ok(res, { sizes, types });
 }));
 
 settingsRouter.post("/sizes", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -499,6 +581,38 @@ settingsRouter.delete("/sizes/:id", requirePermissions("settings_manage"), async
   await prisma.size.delete({ where: { id } });
   await writeAuditLog({ userId: req.currentUser?.id, action: "settings.sizes.delete", entityType: "size", entityId: id });
   return ok(res, true, "Taille supprimee.");
+}));
+
+settingsRouter.post("/size-types", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const payload = typeNameSchema.parse(req.body);
+  const current = await readSizeTypes();
+  if (current.some((type) => type.toLowerCase() === payload.name.trim().toLowerCase())) throw new AppError("Ce type taille existe deja.", 409);
+  const types = await saveTypeSetting("size_types", [...current, payload.name.trim()]);
+  await writeAuditLog({ userId: req.currentUser?.id, action: "settings.size_types.create", entityType: "setting", meta: payload });
+  return ok(res, { types }, "Type taille cree.");
+}));
+
+settingsRouter.put("/size-types/:name", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const currentName = decodeURIComponent(String(req.params.name));
+  const payload = typeNameSchema.parse(req.body);
+  const nextName = payload.name.trim();
+  const current = await readSizeTypes();
+  if (!current.includes(currentName)) throw new AppError("Type taille introuvable.", 404);
+  if (current.some((type) => type !== currentName && type.toLowerCase() === nextName.toLowerCase())) throw new AppError("Ce type taille existe deja.", 409);
+  await prisma.size.updateMany({ where: { type: currentName }, data: { type: nextName } });
+  const types = await saveTypeSetting("size_types", current.map((type) => type === currentName ? nextName : type));
+  await writeAuditLog({ userId: req.currentUser?.id, action: "settings.size_types.update", entityType: "setting", meta: { from: currentName, to: nextName } });
+  return ok(res, { types }, "Type taille mis a jour.");
+}));
+
+settingsRouter.delete("/size-types/:name", requirePermissions("settings_manage"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const name = decodeURIComponent(String(req.params.name));
+  const used = await prisma.size.count({ where: { type: name } });
+  if (used > 0) throw new AppError("Impossible de supprimer ce type car il est utilise par des tailles.", 409);
+  const current = await readSizeTypes();
+  const types = await saveTypeSetting("size_types", current.filter((type) => type !== name));
+  await writeAuditLog({ userId: req.currentUser?.id, action: "settings.size_types.delete", entityType: "setting", meta: { name } });
+  return ok(res, { types }, "Type taille supprime.");
 }));
 settingsRouter.get("/currencies", requirePermissions("settings_manage"), asyncHandler(async (_req, res) => {
   await ensureCurrenciesSeeded();
