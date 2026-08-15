@@ -449,9 +449,9 @@ export function ProductDetailPage() {
         <SectionCard title="Photo article">
           <div className="overflow-hidden rounded-[24px] border border-white/10 bg-black/30">
             {item.imageUrl ? (
-              <img src={item.imageUrl} alt={item.name} className="h-[360px] w-full object-cover" />
+              <img src={item.imageUrl} alt={item.name} className="h-[430px] w-full object-cover" />
             ) : (
-              <div className="flex h-[360px] flex-col items-center justify-center bg-[radial-gradient(circle_at_top,rgba(255,155,59,0.24),transparent_36%),linear-gradient(180deg,#18120e,#0f0b08)] text-center">
+              <div className="flex h-[430px] flex-col items-center justify-center bg-[radial-gradient(circle_at_top,rgba(255,155,59,0.24),transparent_36%),linear-gradient(180deg,#18120e,#0f0b08)] text-center">
                 <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-white/10 bg-white/5 text-3xl font-semibold text-orange-100">
                   {initials}
                 </div>
