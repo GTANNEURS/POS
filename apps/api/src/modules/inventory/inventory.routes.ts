@@ -375,6 +375,11 @@ inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedReque
   if (product.variants.length && !variant) {
     throw new AppError("Choisis une variante pour cet article.", 422);
   }
+  const variantMovementLabel = variant
+    ? [variant.reference, [variant.color, variant.size].filter(Boolean).join(" - ")]
+        .filter(Boolean)
+        .join(" / ")
+    : "";
 
   await prisma.$transaction(async (tx) => {
     let balances = await readStockBalances(tx);
@@ -408,7 +413,7 @@ inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedReque
         quantity: payload.quantity,
         beforeStock: beforeLocationStock,
         afterStock: afterLocationStock,
-        notes: variant ? `${payload.reason} - ${variant.reference}` : payload.reason
+        notes: variant ? `${payload.reason} - Variante ${variantMovementLabel}` : payload.reason
       }
     });
   });

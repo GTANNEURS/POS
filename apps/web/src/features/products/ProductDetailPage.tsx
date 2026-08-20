@@ -487,6 +487,7 @@ export function ProductDetailPage() {
         });
       }
       await reloadProduct();
+      setSelectedVariantWarehouseId(quickStockWarehouseId);
       setQuickStockQuantities({});
       setQuickStockModalOpen(false);
       window.alert("Stock ajoute avec succes.");
