@@ -413,6 +413,8 @@ inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedReque
         quantity: payload.quantity,
         beforeStock: beforeLocationStock,
         afterStock: afterLocationStock,
+        referenceType: variant ? "variant" : null,
+        referenceId: variant?.id ?? null,
         notes: variant ? `${payload.reason} - Variante ${variantMovementLabel}` : payload.reason
       }
     });

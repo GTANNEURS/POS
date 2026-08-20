@@ -365,9 +365,57 @@ export function ProductDetailPage() {
   }
 
   async function reloadProduct() {
-    if (!id) return;
-    const refreshed = await api<ProductDetail>(`/products/${id}`);
+    if (!id) return null;
+    const refreshed = await api<ProductDetail>(`/products/${id}?refresh=${Date.now()}`);
     setItem(refreshed);
+    return refreshed;
+  }
+
+  function mergeQuickStockIntoProduct(product: ProductDetail, warehouseId: string, warehouseName: string) {
+    const entriesByVariantId = new Map(quickStockEntries.map((entry) => [entry.id, entry]));
+    const variants = product.variants.map((variant) => {
+      const entry = entriesByVariantId.get(variant.id);
+      if (!entry) return variant;
+
+      const locationBalances = [...variant.locationBalances];
+      const index = locationBalances.findIndex((location) => location.warehouseId === warehouseId);
+      const currentQuantity = index >= 0 ? locationBalances[index]!.quantity : 0;
+      const expectedQuantity = entry.currentStock + entry.quantity;
+      const nextQuantity = Math.max(currentQuantity, expectedQuantity);
+
+      if (index >= 0) {
+        locationBalances[index] = { ...locationBalances[index]!, quantity: nextQuantity };
+      } else {
+        locationBalances.push({ warehouseId, warehouseName, quantity: nextQuantity });
+      }
+
+      return {
+        ...variant,
+        stockOnHand: locationBalances.reduce((sum, location) => sum + location.quantity, 0),
+        locationBalances
+      };
+    });
+    const targetWarehouseQuantity = variants.reduce(
+      (sum, variant) => sum + (variant.locationBalances.find((location) => location.warehouseId === warehouseId)?.quantity ?? 0),
+      0
+    );
+    const locationBalances = [...product.locationBalances];
+    const productLocationIndex = locationBalances.findIndex((location) => location.warehouseId === warehouseId);
+    if (productLocationIndex >= 0) {
+      locationBalances[productLocationIndex] = {
+        ...locationBalances[productLocationIndex]!,
+        quantity: Math.max(locationBalances[productLocationIndex]!.quantity, targetWarehouseQuantity)
+      };
+    } else {
+      locationBalances.push({ warehouseId, warehouseName, quantity: targetWarehouseQuantity });
+    }
+
+    return {
+      ...product,
+      variants,
+      stockOnHand: variants.length ? variants.reduce((sum, variant) => sum + variant.stockOnHand, 0) : product.stockOnHand,
+      locationBalances
+    };
   }
 
   function printQuickStockLabels() {
@@ -486,7 +534,10 @@ export function ProductDetailPage() {
           })
         });
       }
-      await reloadProduct();
+      const refreshed = await reloadProduct();
+      if (refreshed) {
+        setItem(mergeQuickStockIntoProduct(refreshed, quickStockWarehouseId, quickStockWarehouseName));
+      }
       setSelectedVariantWarehouseId(quickStockWarehouseId);
       setQuickStockQuantities({});
       setQuickStockModalOpen(false);

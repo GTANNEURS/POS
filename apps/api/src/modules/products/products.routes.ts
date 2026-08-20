@@ -141,6 +141,21 @@ function codePrefix(value: string) {
     .slice(0, 10) || "ITEM";
 }
 
+function normalizeWarehouseLabel(value: string | null | undefined) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function pickCentralWarehouseId(warehouses: Array<{ id: string; name: string; type?: string | null }>) {
+  return warehouses.find((warehouse) => normalizeWarehouseLabel(warehouse.name).includes("depot central"))?.id
+    ?? warehouses.find((warehouse) => warehouse.type === "WAREHOUSE")?.id
+    ?? warehouses[0]?.id
+    ?? null;
+}
+
 async function ensureVariantMetaSeeded() {
   const [colorCount, sizeCount] = await Promise.all([prisma.color.count(), prisma.size.count()]);
 
@@ -485,7 +500,11 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
   if (!product) throw new AppError("Article introuvable.", 404);
   const scopedWarehouseId = getScopedWarehouseId(req.currentUser);
   const shouldExposeAllWarehouseBalances = isAdminUser(req.currentUser);
-  const warehouses = await prisma.warehouse.findMany({ select: { id: true, name: true } });
+  const warehouses = await prisma.warehouse.findMany({ select: { id: true, name: true, type: true } });
+  const preferredSeedWarehouseId = scopedWarehouseId
+    ?? (shouldExposeAllWarehouseBalances ? pickCentralWarehouseId(warehouses) : null)
+    ?? product.warehouseId
+    ?? undefined;
   const variantColorNames = Array.from(new Set(product.variants.map((variant) => variant.color?.trim()).filter((value): value is string => Boolean(value))));
   const colors = variantColorNames.length
     ? await prisma.color.findMany({ where: { name: { in: variantColorNames } }, select: { name: true, reference: true } })
@@ -496,9 +515,9 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
   const initialVariantBalances = await readVariantStockBalances();
   let balances = initialBalances;
   let variantBalances = initialVariantBalances;
-  balances = await ensureProductStockSeeded(prisma, balances, product, scopedWarehouseId ?? product.warehouseId ?? undefined);
+  balances = await ensureProductStockSeeded(prisma, balances, product, preferredSeedWarehouseId);
   for (const variant of product.variants) {
-    variantBalances = await ensureVariantStockSeeded(prisma, variantBalances, { ...variant, product: { warehouseId: product.warehouseId } }, scopedWarehouseId ?? product.warehouseId ?? undefined);
+    variantBalances = await ensureVariantStockSeeded(prisma, variantBalances, { ...variant, product: { warehouseId: product.warehouseId } }, preferredSeedWarehouseId);
   }
   if (!areStockBalancesEqual(initialBalances, balances)) {
     await saveStockBalances(prisma, balances);
