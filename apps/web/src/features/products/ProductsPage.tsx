@@ -1091,17 +1091,17 @@ export function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const searchReadyRef = useRef(false);
   const canEditProducts = user?.roles.includes("admin") ?? false;
   const scopedWarehouseName = cleanWarehouseName(user?.defaultWarehouse?.name ?? null) || null;
 
-  async function load(searchValue = "") {
-    setLoading(true);
+  async function load(searchValue = "", options: { refreshMeta?: boolean; soft?: boolean } = {}) {
+    if (!options.soft) setLoading(true);
     setError(null);
     try {
-      const [products, metadata] = await Promise.all([
-        api<Product[]>(`/products${searchValue ? `?search=${encodeURIComponent(searchValue)}` : ""}`),
-        api<ProductMeta>("/products/meta")
-      ]);
+      const productsPromise = api<Product[]>(`/products${searchValue ? `?search=${encodeURIComponent(searchValue)}` : ""}`);
+      const metadataPromise = !meta || options.refreshMeta ? api<ProductMeta>("/products/meta") : Promise.resolve(meta);
+      const [products, metadata] = await Promise.all([productsPromise, metadataPromise]);
       setItems(products);
       setMeta(metadata);
       if (!form.warehouseId && metadata.warehouses[0]) {
@@ -1115,8 +1115,19 @@ export function ProductsPage() {
   }
 
   useEffect(() => {
-    void load();
+    void load("", { refreshMeta: true });
   }, []);
+
+  useEffect(() => {
+    if (!searchReadyRef.current) {
+      searchReadyRef.current = true;
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      void load(search, { soft: true });
+    }, 320);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
 
   const pageSize = 20;
 
@@ -1406,7 +1417,7 @@ export function ProductsPage() {
           description={scopedWarehouseName
             ? `Boutique ${scopedWarehouseName}: ${formatNumber(stats.total)} articles, ${formatNumber(stats.lowStock)} en alerte, valorisation ${formatCurrency(stats.stockValue)}.`
             : `Catalogue: ${formatNumber(stats.total)} articles, ${formatNumber(stats.lowStock)} en alerte, valorisation ${formatCurrency(stats.stockValue)}.`}
-          actions={<Input className="w-full min-w-[260px] md:w-[320px]" placeholder="Rechercher un article..." value={search} onChange={(event) => { const value = event.target.value; setSearch(value); void load(value); }} />}
+          actions={<Input className="w-full min-w-[260px] md:w-[320px]" placeholder="Rechercher un article..." value={search} onChange={(event) => setSearch(event.target.value)} />}
         >
           <div className="mb-4 flex flex-wrap gap-3 text-xs text-[#baa999]">
             {importMessage ? <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-emerald-100">{importMessage}</span> : null}

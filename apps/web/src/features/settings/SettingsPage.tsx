@@ -649,8 +649,6 @@ export function SettingsPage() {
   async function load() {
     setLoading(true);
     setMessage(null);
-    let fallbackSellers: SellerOption[] = [];
-    let fallbackBoutiques: BoutiqueOption[] = [];
     try {
       const data = await api<SettingRow[]>("/settings");
       const rawSettings = Object.fromEntries(data.map((item) => [item.key, item.value]));
@@ -675,77 +673,98 @@ export function SettingsPage() {
         ticket_print_profiles: normalizeTicketPrintProfiles(rawSettings.ticket_print_profiles)
       });
 
-      try {
-        const boutiqueData = await api<BoutiquesPayload>("/settings/boutiques");
-        setBoutiques(boutiqueData.boutiques);
-        setSellerOptions(boutiqueData.sellers);
-        fallbackSellers = boutiqueData.sellers;
-        fallbackBoutiques = boutiqueData.boutiques.map((boutique) => ({ id: boutique.id, name: boutique.name }));
-      } catch {
-        try {
-          const fallback = await api<PosBootstrapPayload>("/pos/bootstrap");
-          const fallbackRows = fallback.warehouses.map((warehouse) => ({ id: warehouse.id, name: warehouse.name, address: "", phone: "", managerName: "", sellerNames: [], ticketPrefix: "" }));
-          setBoutiques(fallbackRows);
-          setSellerOptions(fallback.sellers);
-          fallbackSellers = fallback.sellers;
-          fallbackBoutiques = fallback.warehouses.map((warehouse) => ({ id: warehouse.id, name: warehouse.name }));
-        } catch {
-          setBoutiques([]);
-          setSellerOptions([]);
-          setMessage("Boutiques indisponibles. Relance l'API pour activer la nouvelle route.");
-        }
+      const boutiquesPromise = api<BoutiquesPayload>("/settings/boutiques")
+        .then((boutiqueData) => ({
+          boutiques: boutiqueData.boutiques,
+          sellerOptions: boutiqueData.sellers,
+          fallbackSellers: boutiqueData.sellers,
+          fallbackBoutiques: boutiqueData.boutiques.map((boutique) => ({ id: boutique.id, name: boutique.name })),
+          message: null as string | null
+        }))
+        .catch(async () => {
+          try {
+            const fallback = await api<PosBootstrapPayload>("/pos/bootstrap");
+            return {
+              boutiques: fallback.warehouses.map((warehouse) => ({ id: warehouse.id, name: warehouse.name, address: "", phone: "", managerName: "", sellerNames: [], ticketPrefix: "" })),
+              sellerOptions: fallback.sellers,
+              fallbackSellers: fallback.sellers,
+              fallbackBoutiques: fallback.warehouses.map((warehouse) => ({ id: warehouse.id, name: warehouse.name })),
+              message: null as string | null
+            };
+          } catch {
+            return {
+              boutiques: [],
+              sellerOptions: [],
+              fallbackSellers: [],
+              fallbackBoutiques: [],
+              message: "Boutiques indisponibles. Relance l'API pour activer la nouvelle route."
+            };
+          }
+        });
+
+      const usersPromise = api<UsersPayload>("/users").catch(() => null);
+      const sellersPromise = api<SellersPayload>("/settings/sellers").catch(() => null);
+      const colorsPromise = api<ColorsPayload>("/settings/colors").catch(() => null);
+      const sizesPromise = api<SizesPayload>("/settings/sizes").catch(() => null);
+      const currenciesPromise = api<CurrenciesPayload>("/settings/currencies").catch(() => null);
+      const paymentMethodsPromise = api<PaymentMethodsPayload>("/settings/payment-methods").catch(() => null);
+
+      const [boutiqueResult, userData, sellerData, colorData, sizeData, currencyData, paymentMethodsData] = await Promise.all([
+        boutiquesPromise,
+        usersPromise,
+        sellersPromise,
+        colorsPromise,
+        sizesPromise,
+        currenciesPromise,
+        paymentMethodsPromise
+      ]);
+
+      setBoutiques(boutiqueResult.boutiques);
+      setSellerOptions(boutiqueResult.sellerOptions);
+      if (boutiqueResult.message) {
+        setMessage(boutiqueResult.message);
       }
 
-      try {
-        const userData = await api<UsersPayload>("/users");
+      if (userData) {
         setUserRows(userData.users);
         setInitialUserRows(userData.users);
         setUserRoles(userData.roles);
         setUserPermissions(userData.permissions);
         setUserWarehouses(userData.warehouses ?? []);
-      } catch {
+      } else {
         setUserRows([]);
         setInitialUserRows([]);
         setUserRoles([]);
         setUserPermissions([]);
         setUserWarehouses([]);
       }
-      try {
-        const sellerData = await api<SellersPayload>("/settings/sellers");
+
+      if (sellerData) {
         setSellerRows(sellerData.sellers);
         setSellerBoutiques(sellerData.boutiques);
         setSellerCategories(sellerData.categories);
-      } catch {
-        setSellerRows(fallbackSellers.map((seller) => ({ id: seller.id, fullName: seller.fullName, email: "", boutiqueId: null, boutiqueName: "", commissionRate: 0, categoryIds: [], categoryNames: [] })));
-        setSellerBoutiques(fallbackBoutiques);
+      } else {
+        setSellerRows(boutiqueResult.fallbackSellers.map((seller) => ({ id: seller.id, fullName: seller.fullName, email: "", boutiqueId: null, boutiqueName: "", commissionRate: 0, categoryIds: [], categoryNames: [] })));
+        setSellerBoutiques(boutiqueResult.fallbackBoutiques);
         setSellerCategories([]);
       }
-      try {
-        const colorData = await api<ColorsPayload>("/settings/colors");
+
+      if (colorData) {
         setColors(colorData.colors);
         setColorTypes(colorData.types);
-      } catch {
+      } else {
         setColors([]);
       }
-      try {
-        const sizeData = await api<SizesPayload>("/settings/sizes");
+
+      if (sizeData) {
         setSizes(sizeData.sizes);
         setSizeTypes(sizeData.types);
-      } catch {
+      } else {
         setSizes([]);
       }
-      try {
-        const currencyData = await api<CurrenciesPayload>("/settings/currencies");
-        setCurrencies(currencyData.currencies);
-      } catch {
-        setCurrencies([]);
-      }
-      try {
-        const paymentMethodsData = await api<PaymentMethodsPayload>("/settings/payment-methods");
-        setPaymentMethods(paymentMethodsData.paymentMethods);
-      } catch {
-        setPaymentMethods([]);
-      }
+
+      setCurrencies(currencyData?.currencies ?? []);
+      setPaymentMethods(paymentMethodsData?.paymentMethods ?? []);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Chargement des parametres impossible.");
     } finally {
