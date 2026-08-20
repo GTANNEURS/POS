@@ -110,6 +110,12 @@ function formatVariantSelectReference(reference: string) {
 }
 
 function isCentralWarehouseName(value?: string | null) {
+  const normalized = cleanWarehouseName(value)
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (normalized === "depot central" || normalized === "entrepot central") return true;
   return cleanWarehouseName(value).trim().toLowerCase() === "dépôt central";
 }
 
@@ -234,8 +240,25 @@ export function ProductDetailPage() {
     if (!selectedLabelOption) return "";
     return buildCode39Svg(selectedLabelOption.barcode, { height: 46, narrowBarWidth: 1.6, wideBarWidth: 4.2, quietZone: 10 });
   }, [selectedLabelOption]);
-  const quickStockWarehouseId = user?.defaultWarehouse?.id ?? activeVariantWarehouseId;
-  const quickStockWarehouseName = cleanWarehouseName(user?.defaultWarehouse?.name ?? activeVariantWarehouse?.warehouseName ?? null) || "Boutique connectee";
+  const quickStockWarehouse = useMemo(() => {
+    if (!item) return null;
+    if (isAdminSession) {
+      const locations = [
+        ...item.locationBalances,
+        ...item.variants.flatMap((variant) => variant.locationBalances)
+      ];
+      return locations.find((location) => isCentralWarehouseName(location.warehouseName)) ?? activeVariantWarehouse;
+    }
+    if (user?.defaultWarehouse?.id) {
+      return {
+        warehouseId: user.defaultWarehouse.id,
+        warehouseName: user.defaultWarehouse.name
+      };
+    }
+    return activeVariantWarehouse;
+  }, [activeVariantWarehouse, isAdminSession, item, user?.defaultWarehouse?.id, user?.defaultWarehouse?.name]);
+  const quickStockWarehouseId = quickStockWarehouse?.warehouseId ?? null;
+  const quickStockWarehouseName = cleanWarehouseName(quickStockWarehouse?.warehouseName ?? null) || "Boutique connectee";
   const quickStockRows = useMemo(() => {
     if (!item) return [];
     return item.variants.map((variant) => {
@@ -248,12 +271,35 @@ export function ProductDetailPage() {
         title,
         color: variant.color?.trim() || "-",
         size: variant.size?.trim() || "-",
+        colorReference: variant.colorReference?.trim() || "",
         reference: variant.reference ?? "",
         barcode: variant.barcode ?? "",
         currentStock
       };
     });
   }, [item, quickStockWarehouseId]);
+  const quickStockSizes = useMemo(() => Array.from(new Set(quickStockRows.map((row) => row.size))), [quickStockRows]);
+  const quickStockMatrixRows = useMemo(() => {
+    const rows = new Map<string, {
+      color: string;
+      colorReference: string;
+      variantsBySize: Map<string, (typeof quickStockRows)[number]>;
+    }>();
+    quickStockRows.forEach((variant) => {
+      const existing = rows.get(variant.color);
+      if (existing) {
+        if (!existing.colorReference && variant.colorReference) existing.colorReference = variant.colorReference;
+        existing.variantsBySize.set(variant.size, variant);
+        return;
+      }
+      rows.set(variant.color, {
+        color: variant.color,
+        colorReference: variant.colorReference,
+        variantsBySize: new Map([[variant.size, variant]])
+      });
+    });
+    return Array.from(rows.values());
+  }, [quickStockRows]);
   const quickStockEntries = useMemo(() => quickStockRows
     .map((row) => ({ ...row, quantity: Math.max(0, Math.trunc(Number(quickStockQuantities[row.id] || 0))) }))
     .filter((row) => row.quantity > 0), [quickStockQuantities, quickStockRows]);
@@ -881,59 +927,55 @@ export function ProductDetailPage() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto px-5 py-4 md:px-6">
-              <div className="mb-4 grid gap-3 md:grid-cols-3">
-                <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#bdaa98]">Article</p>
-                  <p className="mt-1 text-sm font-semibold text-white">{item.name}</p>
-                  <p className="mt-1 text-xs text-[#b9aa9b]">{item.reference}</p>
-                </div>
-                <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#bdaa98]">A ajouter</p>
-                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(quickStockTotalQuantity)}</p>
-                  <p className="mt-1 text-xs text-[#b9aa9b]">{formatNumber(quickStockEntries.length)} declinaison(s) remplie(s)</p>
-                </div>
-                <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#bdaa98]">Etiquettes</p>
-                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(quickStockTotalQuantity)}</p>
-                  <p className="mt-1 text-xs text-[#b9aa9b]">Selon les quantites saisies</p>
-                </div>
-              </div>
-
               <div className="overflow-auto rounded-[22px] border border-white/10">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead className="bg-white/5 text-xs uppercase tracking-[0.18em] text-[#d9c5b1]">
+                <table className="w-full min-w-[860px] border-separate border-spacing-0 text-left text-sm">
+                  <thead className="bg-white/5 text-xs uppercase tracking-[0.16em] text-[#d9c5b1]">
                     <tr>
-                      <th className="px-4 py-3">Declinaison</th>
-                      <th className="px-4 py-3">Reference</th>
-                      <th className="px-4 py-3">Code-barres</th>
-                      <th className="px-4 py-3 text-center">Stock actuel</th>
-                      <th className="px-4 py-3 text-center">Quantite a ajouter</th>
+                      <th className="sticky left-0 z-10 w-[210px] bg-[#211812] px-4 py-3">Couleur / taille</th>
+                      {quickStockSizes.map((size) => (
+                        <th key={size} className="min-w-[138px] px-3 py-3 text-center">{size}</th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/10">
-                    {quickStockRows.map((row) => (
-                      <tr key={row.id} className="transition hover:bg-white/[0.04]">
-                        <td className="px-4 py-3">
-                          <p className="font-semibold text-white">{row.title}</p>
-                          <p className="mt-1 text-xs text-[#b9aa9b]">{row.color} / {row.size}</p>
+                  <tbody>
+                    {quickStockMatrixRows.map((row) => (
+                      <tr key={row.color} className="border-t border-white/10">
+                        <td className="sticky left-0 z-10 border-t border-white/10 bg-[#17110d] px-4 py-3">
+                          <p className="font-semibold text-white">{row.color}</p>
+                          {row.colorReference ? <p className="mt-1 text-xs text-[#b9aa9b]">{row.colorReference}</p> : null}
                         </td>
-                        <td className="px-4 py-3 text-[#eadfd4]">{row.reference || "-"}</td>
-                        <td className="px-4 py-3 text-[#eadfd4]">{row.barcode || "-"}</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className="inline-flex min-w-[52px] items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-white">
-                            {formatNumber(row.currentStock)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={quickStockQuantities[row.id] ?? ""}
-                            onChange={(event) => setQuickStockQuantity(row.id, event.target.value)}
-                            placeholder="0"
-                            className="mx-auto !h-10 !w-[110px] !border-orange-300/25 !bg-black/35 !text-center !font-semibold !text-white"
-                          />
-                        </td>
+                        {quickStockSizes.map((size) => {
+                          const variant = row.variantsBySize.get(size);
+                          return (
+                            <td key={`${row.color}-${size}`} className="border-t border-white/10 px-3 py-3 align-top">
+                              {variant ? (
+                                <div className="rounded-[18px] border border-white/10 bg-black/25 p-2.5">
+                                  <div className="mb-2 flex items-start justify-between gap-2 text-[11px] text-[#b9aa9b]">
+                                    <div>
+                                      <p className="font-semibold text-[#eadfd4]">{variant.reference || "-"}</p>
+                                      <p className="mt-0.5">{variant.barcode || "Sans code-barres"}</p>
+                                    </div>
+                                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-semibold text-white">
+                                      Stock {formatNumber(variant.currentStock)}
+                                    </span>
+                                  </div>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    value={quickStockQuantities[variant.id] ?? ""}
+                                    onChange={(event) => setQuickStockQuantity(variant.id, event.target.value)}
+                                    placeholder="0"
+                                    className="!h-9 !w-full !border-orange-300/25 !bg-black/35 !text-center !text-sm !font-semibold !text-white"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex min-h-[86px] items-center justify-center rounded-[18px] border border-dashed border-white/10 bg-white/[0.02] text-xs text-[#8d7d70]">
+                                  -
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
@@ -941,8 +983,7 @@ export function ProductDetailPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4 md:px-6">
-              <p className="text-xs text-[#b9aa9b]">Les quantites se vident automatiquement a chaque nouvelle ouverture du tableau.</p>
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-white/10 px-5 py-4 md:px-6">
               <div className="flex flex-wrap justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => setQuickStockQuantities({})} disabled={quickStockSaving || !quickStockTotalQuantity}>Vider</Button>
                 <Button type="button" variant="secondary" onClick={printQuickStockLabels} disabled={!quickStockTotalQuantity}>Imprimer etiquettes</Button>
