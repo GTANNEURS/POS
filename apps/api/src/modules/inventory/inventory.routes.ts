@@ -87,6 +87,24 @@ function isTransferNotification(value: unknown): value is InventoryTransferNotif
     && Array.isArray(notification.readByUserIds);
 }
 
+function normalizeWarehouseName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+async function resolveAdminAdjustmentWarehouseId(fallbackWarehouseId: string) {
+  const warehouses = await prisma.warehouse.findMany({
+    orderBy: [{ type: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, type: true }
+  });
+  return warehouses.find((warehouse) => normalizeWarehouseName(warehouse.name).includes("depot central"))?.id
+    ?? warehouses.find((warehouse) => warehouse.type === "WAREHOUSE")?.id
+    ?? fallbackWarehouseId;
+}
+
 async function readTransferNotifications(db: SettingsDb) {
   const setting = await db.setting.findUnique({ where: { key: INVENTORY_TRANSFER_NOTIFICATIONS_KEY } });
   if (!Array.isArray(setting?.value)) return [];
@@ -349,7 +367,8 @@ inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedReque
     throw new AppError("Ajustement reserve a l'administrateur.", 403);
   }
   const payload = adjustmentSchema.parse(req.body);
-  ensureWarehouseAccess(req.currentUser, payload.warehouseId);
+  const targetWarehouseId = await resolveAdminAdjustmentWarehouseId(payload.warehouseId);
+  ensureWarehouseAccess(req.currentUser, targetWarehouseId);
   const product = await prisma.product.findUnique({ where: { id: payload.productId }, include: { variants: true } });
   if (!product) throw new AppError("Article introuvable.", 404);
   const variant = payload.variantId ? product.variants.find((item) => item.id === payload.variantId) ?? null : null;
@@ -359,24 +378,24 @@ inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedReque
 
   await prisma.$transaction(async (tx) => {
     let balances = await readStockBalances(tx);
-    balances = await ensureProductStockSeeded(tx, balances, product, payload.warehouseId);
+    balances = await ensureProductStockSeeded(tx, balances, product, targetWarehouseId);
     let variantBalances = await readVariantStockBalances(tx);
     if (variant) {
-      variantBalances = await ensureVariantStockSeeded(tx, variantBalances, { ...variant, product: { warehouseId: product.warehouseId } }, payload.warehouseId);
+      variantBalances = await ensureVariantStockSeeded(tx, variantBalances, { ...variant, product: { warehouseId: product.warehouseId } }, targetWarehouseId);
     }
 
     const beforeLocationStock = variant
-      ? getVariantLocationStock(variantBalances, variant.id, payload.warehouseId)
-      : getLocationStock(balances, product.id, payload.warehouseId);
+      ? getVariantLocationStock(variantBalances, variant.id, targetWarehouseId)
+      : getLocationStock(balances, product.id, targetWarehouseId);
     const afterLocationStock = beforeLocationStock + payload.quantity;
     if (afterLocationStock < 0) throw new AppError("Stock insuffisant sur cet emplacement.", 422);
 
-    balances = applyLocationDelta(balances, product.id, payload.warehouseId, payload.quantity);
+    balances = applyLocationDelta(balances, product.id, targetWarehouseId, payload.quantity);
     await saveStockBalances(tx, balances);
     await syncProductGlobalStock(tx, balances, product.id);
 
     if (variant) {
-      variantBalances = applyVariantLocationDelta(variantBalances, variant.id, payload.warehouseId, payload.quantity);
+      variantBalances = applyVariantLocationDelta(variantBalances, variant.id, targetWarehouseId, payload.quantity);
       await saveVariantStockBalances(tx, variantBalances);
       await syncVariantGlobalStock(tx, variantBalances, variant.id);
     }
@@ -384,7 +403,7 @@ inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedReque
     await tx.stockMovement.create({
       data: {
         productId: product.id,
-        warehouseId: payload.warehouseId,
+        warehouseId: targetWarehouseId,
         type: "ADJUSTMENT",
         quantity: payload.quantity,
         beforeStock: beforeLocationStock,
@@ -394,7 +413,13 @@ inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedReque
     });
   });
 
-  await writeAuditLog({ userId: req.currentUser?.id, action: "inventory.adjust", entityType: "product", entityId: product.id, meta: payload });
+  await writeAuditLog({
+    userId: req.currentUser?.id,
+    action: "inventory.adjust",
+    entityType: "product",
+    entityId: product.id,
+    meta: { ...payload, requestedWarehouseId: payload.warehouseId, warehouseId: targetWarehouseId }
+  });
   return ok(res, true, "Ajustement enregistre.");
 }));
 

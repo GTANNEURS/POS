@@ -484,6 +484,7 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
 
   if (!product) throw new AppError("Article introuvable.", 404);
   const scopedWarehouseId = getScopedWarehouseId(req.currentUser);
+  const shouldExposeAllWarehouseBalances = isAdminUser(req.currentUser);
   const warehouses = await prisma.warehouse.findMany({ select: { id: true, name: true } });
   const variantColorNames = Array.from(new Set(product.variants.map((variant) => variant.color?.trim()).filter((value): value is string => Boolean(value))));
   const colors = variantColorNames.length
@@ -533,7 +534,7 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
             warehouseName: warehouseMap.get(entry.warehouseId) ?? null,
             quantity: entry.quantity
           })))
-      .filter((entry) => entry.quantity > 0 || entry.warehouseId === scopedWarehouseId),
+      .filter((entry) => shouldExposeAllWarehouseBalances || entry.quantity > 0 || entry.warehouseId === scopedWarehouseId),
     variants: product.variants.map((variant) => ({
       ...variant,
       colorReference: variant.color ? (colorReferenceMap.get(variant.color.trim().toLowerCase()) ?? null) : null,
@@ -544,7 +545,7 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
           warehouseName: warehouseMap.get(warehouse.id) ?? null,
           quantity: getVariantLocationStock(variantBalances, variant.id, warehouse.id)
         }))
-        .filter((entry) => entry.quantity > 0 || entry.warehouseId === scopedWarehouseId)
+        .filter((entry) => shouldExposeAllWarehouseBalances || entry.quantity > 0 || entry.warehouseId === scopedWarehouseId)
     }))
   });
 }));

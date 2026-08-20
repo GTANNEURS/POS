@@ -61,6 +61,22 @@ function cleanWarehouseName(value: string) {
   return normalized;
 }
 
+function isCentralWarehouseName(value?: string | null) {
+  const normalized = cleanWarehouseName(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  return normalized === "depot central" || normalized === "entrepot central";
+}
+
+function findCentralWarehouse<T extends { name: string; type?: string }>(warehouses: T[]) {
+  return warehouses.find((warehouse) => isCentralWarehouseName(warehouse.name))
+    ?? warehouses.find((warehouse) => warehouse.type === "WAREHOUSE")
+    ?? warehouses[0]
+    ?? null;
+}
+
 export function InventoryPage() {
   const { user } = useAuth();
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -109,15 +125,17 @@ export function InventoryPage() {
     setProducts(bootstrap.products);
     setWarehouses(bootstrap.warehouses);
     setOverview(bootstrap.overview);
+    const adminCentralWarehouse = user?.roles.includes("admin") ? findCentralWarehouse(bootstrap.warehouses) : null;
+
     setForm((current) => ({
       ...current,
       productId: current.productId || "",
-      warehouseId: current.warehouseId || user?.defaultWarehouse?.id || bootstrap.warehouses[0]?.id || ""
+      warehouseId: adminCentralWarehouse?.id || current.warehouseId || user?.defaultWarehouse?.id || bootstrap.warehouses[0]?.id || ""
     }));
     setTransferForm((current) => ({
       ...current,
       productId: current.productId || "",
-      fromWarehouseId: current.fromWarehouseId || user?.defaultWarehouse?.id || bootstrap.warehouses[0]?.id || "",
+      fromWarehouseId: current.fromWarehouseId || adminCentralWarehouse?.id || user?.defaultWarehouse?.id || bootstrap.warehouses[0]?.id || "",
       toWarehouseId: current.toWarehouseId || user?.defaultWarehouse?.id || bootstrap.warehouses[1]?.id || bootstrap.warehouses[0]?.id || ""
     }));
     setLoading(false);
@@ -140,13 +158,14 @@ export function InventoryPage() {
   async function submitAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (adjustmentBlocked) return;
+    const targetWarehouseId = isAdminSession ? centralWarehouse?.id ?? form.warehouseId : form.warehouseId;
     setSaving(true);
     await api("/inventory/adjustments", {
       method: "POST",
       body: JSON.stringify({
         productId: form.productId,
         variantId: form.variantId || null,
-        warehouseId: form.warehouseId,
+        warehouseId: targetWarehouseId,
         quantity: Number(form.quantity),
         reason: form.reason
       })
@@ -301,11 +320,17 @@ export function InventoryPage() {
     [selectedTransferProduct, transferForm.variantId]
   );
   const transferVariantRequired = (selectedTransferProduct?.variants.length ?? 0) > 0 && !transferForm.variantId;
-  const currentWarehouseId = user?.defaultWarehouse?.id ?? null;
+  const isAdminSession = user?.roles.includes("admin") ?? false;
   const displayWarehouses = useMemo(
     () => warehouses.map((warehouse) => ({ ...warehouse, name: cleanWarehouseName(warehouse.name) })),
     [warehouses]
   );
+  const centralWarehouse = useMemo(() => findCentralWarehouse(displayWarehouses), [displayWarehouses]);
+  const currentWarehouseId = isAdminSession ? centralWarehouse?.id ?? null : user?.defaultWarehouse?.id ?? null;
+  useEffect(() => {
+    if (!isAdminSession || !centralWarehouse?.id) return;
+    setForm((current) => current.warehouseId === centralWarehouse.id ? current : { ...current, warehouseId: centralWarehouse.id });
+  }, [centralWarehouse?.id, isAdminSession]);
   const orderedWarehouses = useMemo(() => {
     if (!currentWarehouseId) return displayWarehouses;
     const currentWarehouse = displayWarehouses.find((warehouse) => warehouse.id === currentWarehouseId);
@@ -313,8 +338,10 @@ export function InventoryPage() {
     return currentWarehouse ? [currentWarehouse, ...otherWarehouses] : displayWarehouses;
   }, [currentWarehouseId, displayWarehouses]);
   const operationalWarehouses = useMemo(
-    () => user?.roles.includes("admin") ? orderedWarehouses : orderedWarehouses.filter((warehouse) => warehouse.id === currentWarehouseId),
-    [currentWarehouseId, orderedWarehouses, user?.roles]
+    () => isAdminSession
+      ? orderedWarehouses.filter((warehouse) => warehouse.id === currentWarehouseId)
+      : orderedWarehouses.filter((warehouse) => warehouse.id === currentWarehouseId),
+    [currentWarehouseId, isAdminSession, orderedWarehouses]
   );
   const canAdjustStock = user?.roles.includes("admin") ?? false;
   const canTransferStock = (user?.permissions.includes("inventory_manage") ?? false) && orderedWarehouses.length > 1;
@@ -444,12 +471,14 @@ export function InventoryPage() {
   }
 
   function openAdjustmentModal() {
+    const targetWarehouseId = isAdminSession ? centralWarehouse?.id ?? "" : user?.defaultWarehouse?.id ?? form.warehouseId;
     setAdjustmentModalOpen(true);
     setAdjustmentSearch("");
     setForm((current) => ({
       ...current,
       productId: "",
       variantId: "",
+      warehouseId: targetWarehouseId || current.warehouseId,
       quantity: "0",
       reason: "Ajustement inventaire"
     }));

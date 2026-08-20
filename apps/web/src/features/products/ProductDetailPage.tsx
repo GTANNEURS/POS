@@ -258,7 +258,7 @@ export function ProductDetailPage() {
     return activeVariantWarehouse;
   }, [activeVariantWarehouse, isAdminSession, item, user?.defaultWarehouse?.id, user?.defaultWarehouse?.name]);
   const quickStockWarehouseId = quickStockWarehouse?.warehouseId ?? null;
-  const quickStockWarehouseName = cleanWarehouseName(quickStockWarehouse?.warehouseName ?? null) || "Boutique connectee";
+  const quickStockWarehouseName = cleanWarehouseName(quickStockWarehouse?.warehouseName ?? null) || (isAdminSession ? "Dépôt Central" : "Boutique non definie");
   const quickStockRows = useMemo(() => {
     if (!item) return [];
     return item.variants.map((variant) => {
@@ -918,7 +918,6 @@ export function ProductDetailPage() {
             <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4 md:px-6">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">Ajout rapide stock</p>
-                <h2 className="mt-1 text-2xl font-semibold text-white">Declinaisons disponibles</h2>
                 <p className="mt-1 text-sm text-[#cdbfb1]">Boutique cible: <span className="font-semibold text-white">{quickStockWarehouseName}</span></p>
               </div>
               <button type="button" className="rounded-full border border-white/10 p-2 text-[#eadfd4]" onClick={() => !quickStockSaving && setQuickStockModalOpen(false)}>
