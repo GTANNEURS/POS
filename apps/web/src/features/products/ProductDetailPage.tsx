@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ImageOff, Printer, X } from "lucide-react";
+import { ImageOff, Plus, Printer, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { Badge, Button, EmptyState, Field, Input, LoadingBlock, PageHeader, SectionCard, Select } from "../../components/ui/primitives";
 import { api } from "../../lib/api";
@@ -123,6 +123,9 @@ export function ProductDetailPage() {
   const [labelModalOpen, setLabelModalOpen] = useState(false);
   const [selectedLabelId, setSelectedLabelId] = useState("");
   const [labelQuantity, setLabelQuantity] = useState("1");
+  const [quickStockModalOpen, setQuickStockModalOpen] = useState(false);
+  const [quickStockQuantities, setQuickStockQuantities] = useState<Record<string, string>>({});
+  const [quickStockSaving, setQuickStockSaving] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -231,6 +234,30 @@ export function ProductDetailPage() {
     if (!selectedLabelOption) return "";
     return buildCode39Svg(selectedLabelOption.barcode, { height: 46, narrowBarWidth: 1.6, wideBarWidth: 4.2, quietZone: 10 });
   }, [selectedLabelOption]);
+  const quickStockWarehouseId = user?.defaultWarehouse?.id ?? activeVariantWarehouseId;
+  const quickStockWarehouseName = cleanWarehouseName(user?.defaultWarehouse?.name ?? activeVariantWarehouse?.warehouseName ?? null) || "Boutique connectee";
+  const quickStockRows = useMemo(() => {
+    if (!item) return [];
+    return item.variants.map((variant) => {
+      const currentStock = quickStockWarehouseId
+        ? variant.locationBalances.find((location) => location.warehouseId === quickStockWarehouseId)?.quantity ?? 0
+        : 0;
+      const title = [variant.color?.trim(), variant.size?.trim()].filter(Boolean).join(" - ") || variant.label || "Variante";
+      return {
+        id: variant.id,
+        title,
+        color: variant.color?.trim() || "-",
+        size: variant.size?.trim() || "-",
+        reference: variant.reference ?? "",
+        barcode: variant.barcode ?? "",
+        currentStock
+      };
+    });
+  }, [item, quickStockWarehouseId]);
+  const quickStockEntries = useMemo(() => quickStockRows
+    .map((row) => ({ ...row, quantity: Math.max(0, Math.trunc(Number(quickStockQuantities[row.id] || 0))) }))
+    .filter((row) => row.quantity > 0), [quickStockQuantities, quickStockRows]);
+  const quickStockTotalQuantity = quickStockEntries.reduce((sum, row) => sum + row.quantity, 0);
 
   useEffect(() => {
     if (!variantMatrixWarehouses.length) {
@@ -279,6 +306,149 @@ export function ProductDetailPage() {
     return isAdminSession
       ? isCentralWarehouseName(location.warehouseName)
       : location.warehouseId === user?.defaultWarehouse?.id;
+  }
+
+  function openQuickStockModal() {
+    setQuickStockQuantities({});
+    setQuickStockModalOpen(true);
+  }
+
+  function setQuickStockQuantity(variantId: string, value: string) {
+    const normalized = value.replace(/[^\d]/g, "");
+    setQuickStockQuantities((current) => ({ ...current, [variantId]: normalized }));
+  }
+
+  async function reloadProduct() {
+    if (!id) return;
+    const refreshed = await api<ProductDetail>(`/products/${id}`);
+    setItem(refreshed);
+  }
+
+  function printQuickStockLabels() {
+    if (!item) return;
+    if (!quickStockEntries.length) {
+      window.alert("Renseigne au moins une quantite a imprimer.");
+      return;
+    }
+    const missingBarcode = quickStockEntries.find((entry) => !entry.barcode);
+    if (missingBarcode) {
+      window.alert(`Code-barres manquant pour ${missingBarcode.title}.`);
+      return;
+    }
+    const invalidBarcode = quickStockEntries.find((entry) => !canEncodeCode39(normalizeCode39Value(entry.barcode)));
+    if (invalidBarcode) {
+      window.alert(`Code-barres incompatible avec l'impression etiquette: ${invalidBarcode.barcode}.`);
+      return;
+    }
+
+    const labels = quickStockEntries.flatMap((entry) => Array.from({ length: Math.min(200, entry.quantity) }, () => entry));
+    const labelsMarkup = labels.map((entry) => {
+      const encodedBarcode = normalizeCode39Value(entry.barcode);
+      const barcodeSvg = buildCode39Svg(encodedBarcode, { height: 62, narrowBarWidth: 1.8, wideBarWidth: 4.6, quietZone: 12 });
+      return `
+        <section class="label">
+          <div class="category">${item.category?.name ?? "Sans categorie"}</div>
+          <div class="subtitle">${entry.title}</div>
+          <div class="meta-row">
+            <div class="reference">${buildVariantLabelReference(item.reference, entry.reference)}</div>
+            <div class="price">${formatCurrency(Number(item.salePriceTtc))}</div>
+          </div>
+          <div class="barcode-wrap">${barcodeSvg}</div>
+          <div class="barcode-text">${encodedBarcode}</div>
+        </section>
+      `;
+    }).join("");
+
+    const popup = window.open("", "_blank", "width=900,height=720");
+    if (!popup) return;
+
+    popup.document.write(`
+      <!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <title>Etiquettes ajout rapide - ${item.reference}</title>
+          <style>
+            @page { size: 50mm 30mm; margin: 0; }
+            * { box-sizing: border-box; }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              font-family: Arial, Helvetica, "Liberation Sans", sans-serif;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              text-rendering: geometricPrecision;
+            }
+            .label {
+              width: 50mm;
+              height: 30mm;
+              padding: 2.2mm 2.2mm 1.8mm;
+              page-break-after: always;
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+              justify-content: flex-start;
+              gap: 1mm;
+            }
+            .label:last-child { page-break-after: auto; }
+            .category { font-size: 7.6pt; line-height: 1.05; font-weight: 800; letter-spacing: 0.01em; color: #111111; min-height: 3.4mm; }
+            .subtitle { font-size: 6.3pt; line-height: 1.05; font-weight: 600; color: #111111; min-height: 2.6mm; }
+            .meta-row { display: flex; align-items: center; justify-content: space-between; gap: 2mm; }
+            .reference { font-size: 7pt; line-height: 1; font-weight: 800; letter-spacing: 0.03em; color: #111111; }
+            .price { font-size: 8.2pt; line-height: 1; font-weight: 800; letter-spacing: -0.01em; color: #111111; white-space: nowrap; text-align: right; }
+            .barcode-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 11.5mm; margin-top: 0.4mm; }
+            .barcode-wrap svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
+            .barcode-text { font-family: "Courier New", monospace; text-align: center; font-size: 7.2pt; line-height: 1; font-weight: 700; letter-spacing: 0.08em; color: #111111; }
+          </style>
+        </head>
+        <body>
+          ${labelsMarkup}
+          <script>
+            window.onload = function () {
+              window.print();
+              setTimeout(function () { window.close(); }, 220);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+  }
+
+  async function addQuickStock() {
+    if (!item) return;
+    if (!quickStockWarehouseId) {
+      window.alert("Aucune boutique ou depot n'est associe a cette session.");
+      return;
+    }
+    if (!quickStockEntries.length) {
+      window.alert("Renseigne au moins une quantite a ajouter.");
+      return;
+    }
+    setQuickStockSaving(true);
+    try {
+      for (const entry of quickStockEntries) {
+        await api("/inventory/adjustments", {
+          method: "POST",
+          body: JSON.stringify({
+            productId: item.id,
+            variantId: entry.id,
+            warehouseId: quickStockWarehouseId,
+            quantity: entry.quantity,
+            reason: "Ajout rapide fiche article"
+          })
+        });
+      }
+      await reloadProduct();
+      setQuickStockQuantities({});
+      setQuickStockModalOpen(false);
+      window.alert("Stock ajoute avec succes.");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Ajout rapide du stock impossible.");
+    } finally {
+      setQuickStockSaving(false);
+    }
   }
 
   function printBarcodeLabels() {
@@ -434,6 +604,14 @@ export function ProductDetailPage() {
         description={`Reference ${item.reference}${item.barcode ? ` - ${item.barcode}` : ""}`}
         actions={(
           <>
+            {isAdminSession && item.variants.length ? (
+              <Button className="!px-4 !py-2 !text-sm" onClick={openQuickStockModal}>
+                <span className="inline-flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Ajout rapide stock
+                </span>
+              </Button>
+            ) : null}
             <Button variant="secondary" className="!px-4 !py-2 !text-sm" onClick={() => setLabelModalOpen(true)} disabled={!labelOptions.length}>
               <span className="inline-flex items-center gap-2">
                 <Printer className="h-4 w-4" />
@@ -688,6 +866,94 @@ export function ProductDetailPage() {
             )}
           </SectionCard>
       </div>
+      {quickStockModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-3 py-4 backdrop-blur-sm">
+          <div className="flex max-h-[92vh] w-full max-w-[1040px] flex-col overflow-hidden rounded-[30px] border border-white/15 bg-[#17110d] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4 md:px-6">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">Ajout rapide stock</p>
+                <h2 className="mt-1 text-2xl font-semibold text-white">Declinaisons disponibles</h2>
+                <p className="mt-1 text-sm text-[#cdbfb1]">Boutique cible: <span className="font-semibold text-white">{quickStockWarehouseName}</span></p>
+              </div>
+              <button type="button" className="rounded-full border border-white/10 p-2 text-[#eadfd4]" onClick={() => !quickStockSaving && setQuickStockModalOpen(false)}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto px-5 py-4 md:px-6">
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#bdaa98]">Article</p>
+                  <p className="mt-1 text-sm font-semibold text-white">{item.name}</p>
+                  <p className="mt-1 text-xs text-[#b9aa9b]">{item.reference}</p>
+                </div>
+                <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#bdaa98]">A ajouter</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(quickStockTotalQuantity)}</p>
+                  <p className="mt-1 text-xs text-[#b9aa9b]">{formatNumber(quickStockEntries.length)} declinaison(s) remplie(s)</p>
+                </div>
+                <div className="rounded-[20px] border border-white/10 bg-black/20 p-4">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#bdaa98]">Etiquettes</p>
+                  <p className="mt-1 text-xl font-semibold text-white">{formatNumber(quickStockTotalQuantity)}</p>
+                  <p className="mt-1 text-xs text-[#b9aa9b]">Selon les quantites saisies</p>
+                </div>
+              </div>
+
+              <div className="overflow-auto rounded-[22px] border border-white/10">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="bg-white/5 text-xs uppercase tracking-[0.18em] text-[#d9c5b1]">
+                    <tr>
+                      <th className="px-4 py-3">Declinaison</th>
+                      <th className="px-4 py-3">Reference</th>
+                      <th className="px-4 py-3">Code-barres</th>
+                      <th className="px-4 py-3 text-center">Stock actuel</th>
+                      <th className="px-4 py-3 text-center">Quantite a ajouter</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/10">
+                    {quickStockRows.map((row) => (
+                      <tr key={row.id} className="transition hover:bg-white/[0.04]">
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-white">{row.title}</p>
+                          <p className="mt-1 text-xs text-[#b9aa9b]">{row.color} / {row.size}</p>
+                        </td>
+                        <td className="px-4 py-3 text-[#eadfd4]">{row.reference || "-"}</td>
+                        <td className="px-4 py-3 text-[#eadfd4]">{row.barcode || "-"}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex min-w-[52px] items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-white">
+                            {formatNumber(row.currentStock)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Input
+                            type="number"
+                            min={0}
+                            value={quickStockQuantities[row.id] ?? ""}
+                            onChange={(event) => setQuickStockQuantity(row.id, event.target.value)}
+                            placeholder="0"
+                            className="mx-auto !h-10 !w-[110px] !border-orange-300/25 !bg-black/35 !text-center !font-semibold !text-white"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4 md:px-6">
+              <p className="text-xs text-[#b9aa9b]">Les quantites se vident automatiquement a chaque nouvelle ouverture du tableau.</p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => setQuickStockQuantities({})} disabled={quickStockSaving || !quickStockTotalQuantity}>Vider</Button>
+                <Button type="button" variant="secondary" onClick={printQuickStockLabels} disabled={!quickStockTotalQuantity}>Imprimer etiquettes</Button>
+                <Button type="button" onClick={() => void addQuickStock()} disabled={quickStockSaving || !quickStockTotalQuantity || !quickStockWarehouseId}>
+                  {quickStockSaving ? "Ajout..." : "Ajouter au stock"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {labelModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-3 py-4 backdrop-blur-sm">
           <div className="w-full max-w-[560px] rounded-[28px] border border-white/15 bg-[#17110d] p-4 shadow-2xl md:p-5">
