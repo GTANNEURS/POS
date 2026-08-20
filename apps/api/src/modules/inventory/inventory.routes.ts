@@ -107,6 +107,15 @@ async function saveTransferNotifications(
   });
 }
 
+async function resolveCurrentUserWarehouseId(currentUser: AuthenticatedRequest["currentUser"]) {
+  if (!currentUser?.id) return currentUser?.defaultWarehouse?.id ?? null;
+  const user = await prisma.user.findUnique({
+    where: { id: currentUser.id },
+    select: { defaultWarehouseId: true }
+  });
+  return user?.defaultWarehouseId ?? currentUser.defaultWarehouse?.id ?? null;
+}
+
 export const inventoryRouter = Router();
 inventoryRouter.use(authenticate, requirePermissions("inventory_manage"));
 
@@ -349,7 +358,8 @@ inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedReque
     throw new AppError("Ajustement reserve a l'administrateur.", 403);
   }
   const payload = adjustmentSchema.parse(req.body);
-  const targetWarehouseId = payload.warehouseId;
+  const linkedWarehouseId = await resolveCurrentUserWarehouseId(req.currentUser);
+  const targetWarehouseId = linkedWarehouseId ?? payload.warehouseId;
   ensureWarehouseAccess(req.currentUser, targetWarehouseId);
   const product = await prisma.product.findUnique({ where: { id: payload.productId }, include: { variants: true } });
   if (!product) throw new AppError("Article introuvable.", 404);

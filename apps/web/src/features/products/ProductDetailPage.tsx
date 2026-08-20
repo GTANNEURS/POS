@@ -45,6 +45,7 @@ type ProductDetail = {
   brand?: { name: string } | null;
   unit?: { name: string } | null;
   warehouse?: { name: string } | null;
+  scopedWarehouse?: { id: string; name: string; code?: string; type?: string } | null;
   variants: Array<{
     id: string;
     label: string;
@@ -156,8 +157,8 @@ export function ProductDetailPage() {
       .join("") || "AR";
   }, [item?.name]);
   const isAdminSession = user?.roles.includes("admin") ?? false;
-  const connectedWarehouseId = user?.defaultWarehouse?.id ?? null;
-  const scopedWarehouseName = cleanWarehouseName(user?.defaultWarehouse?.name ?? item?.warehouse?.name ?? null) || null;
+  const connectedWarehouseId = item?.scopedWarehouse?.id ?? user?.defaultWarehouse?.id ?? null;
+  const scopedWarehouseName = cleanWarehouseName(item?.scopedWarehouse?.name ?? user?.defaultWarehouse?.name ?? item?.warehouse?.name ?? null) || null;
   const orderedLocationBalances = useMemo(() => {
     if (!item) return [];
     if (!connectedWarehouseId) return item.locationBalances;
@@ -172,21 +173,6 @@ export function ProductDetailPage() {
     const others = item.locationBalances.filter((location) => location.warehouseId !== connectedWarehouseId);
     return current ? [current, ...others] : item.locationBalances;
   }, [connectedWarehouseId, item]);
-  const variantMatrixColors = useMemo(() => {
-    if (!item) return [];
-    const colorMap = new Map<string, { name: string; reference?: string | null }>();
-    item.variants.forEach((variant) => {
-      const name = variant.color?.trim() || "Sans couleur";
-      if (!colorMap.has(name)) {
-        colorMap.set(name, { name, reference: variant.colorReference?.trim() || null });
-      }
-    });
-    return Array.from(colorMap.values());
-  }, [item]);
-  const variantMatrixSizes = useMemo(() => {
-    if (!item) return [];
-    return Array.from(new Set(item.variants.map((variant) => variant.size?.trim() || "Sans taille")));
-  }, [item]);
   const activeVariantWarehouseId = useMemo(() => {
     if (!variantMatrixWarehouses.length) return null;
     if (selectedVariantWarehouseId && variantMatrixWarehouses.some((location) => location.warehouseId === selectedVariantWarehouseId)) {
@@ -205,6 +191,25 @@ export function ProductDetailPage() {
       0
     );
   }, [activeVariantWarehouseId, item]);
+  const availableVariantMatrixVariants = useMemo(() => {
+    if (!item || !activeVariantWarehouseId) return [];
+    return item.variants.filter((variant) => (
+      variant.locationBalances.find((location) => location.warehouseId === activeVariantWarehouseId)?.quantity ?? 0
+    ) > 0);
+  }, [activeVariantWarehouseId, item]);
+  const variantMatrixColors = useMemo(() => {
+    const colorMap = new Map<string, { name: string; reference?: string | null }>();
+    availableVariantMatrixVariants.forEach((variant) => {
+      const name = variant.color?.trim() || "Sans couleur";
+      if (!colorMap.has(name)) {
+        colorMap.set(name, { name, reference: variant.colorReference?.trim() || null });
+      }
+    });
+    return Array.from(colorMap.values());
+  }, [availableVariantMatrixVariants]);
+  const variantMatrixSizes = useMemo(() => (
+    Array.from(new Set(availableVariantMatrixVariants.map((variant) => variant.size?.trim() || "Sans taille")))
+  ), [availableVariantMatrixVariants]);
   const labelOptions = useMemo<LabelOption[]>(() => {
     if (!item) return [];
 
@@ -233,6 +238,12 @@ export function ProductDetailPage() {
   }, [selectedLabelOption]);
   const quickStockWarehouse = useMemo(() => {
     if (!item) return null;
+    if (item.scopedWarehouse?.id) {
+      return {
+        warehouseId: item.scopedWarehouse.id,
+        warehouseName: item.scopedWarehouse.name
+      };
+    }
     if (user?.defaultWarehouse?.id) {
       return {
         warehouseId: user.defaultWarehouse.id,
@@ -838,52 +849,56 @@ export function ProductDetailPage() {
                     </div>
                   </div>
 
-                  <div className="overflow-auto rounded-[20px] border border-white/10">
-                    <table className="product-variant-table w-full min-w-[620px] text-left text-sm">
-                      <thead className="bg-white/5 text-xs uppercase tracking-[0.18em] text-[#d9c5b1]">
-                        <tr>
-                          <th className="px-4 py-3">Couleur</th>
-                          {variantMatrixSizes.map((size) => (
-                            <th key={size} className="px-4 py-3 text-center">{size}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/10">
-                        {variantMatrixColors.map((color) => (
-                          <tr key={color.name}>
-                            <td className="px-4 py-3 font-medium text-white">
-                              <span className="inline-flex flex-wrap items-center gap-1">
-                                {color.reference ? (
-                                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-200/80">
-                                    {color.reference}
-                                  </span>
-                                ) : null}
-                                {color.reference ? (
-                                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#cdbfb1]">-</span>
-                                ) : null}
-                                <span>{color.name}</span>
-                              </span>
-                            </td>
-                            {variantMatrixSizes.map((size) => {
-                              const quantity = getVariantMatrixQuantity(color.name, size, activeVariantWarehouseId);
-                              return (
-                                <td key={`${color.name}-${size}`} className="px-4 py-3 text-center">
-                                  <span className={quantity > 0
-                                    ? "inline-flex min-w-[42px] items-center justify-center rounded-full bg-orange-300/14 px-2.5 py-1 text-xs font-semibold text-white"
-                                    : quantity < 0
-                                      ? "inline-flex min-w-[42px] items-center justify-center rounded-full border border-rose-300/30 bg-rose-400/10 px-2.5 py-1 text-xs font-semibold text-rose-100"
-                                    : "text-[#7d6f63]"}
-                                  >
-                                    {formatNumber(quantity)}
-                                  </span>
-                                </td>
-                              );
-                            })}
+                  {variantMatrixColors.length === 0 ? (
+                    <EmptyState title="Aucune variante disponible" description="Aucune declinaison avec stock positif dans cette boutique." compact />
+                  ) : (
+                    <div className="overflow-auto rounded-[20px] border border-white/10">
+                      <table className="product-variant-table w-full min-w-[620px] text-left text-sm">
+                        <thead className="bg-white/5 text-xs uppercase tracking-[0.18em] text-[#d9c5b1]">
+                          <tr>
+                            <th className="px-4 py-3">Couleur</th>
+                            {variantMatrixSizes.map((size) => (
+                              <th key={size} className="px-4 py-3 text-center">{size}</th>
+                            ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody className="divide-y divide-white/10">
+                          {variantMatrixColors.map((color) => (
+                            <tr key={color.name}>
+                              <td className="px-4 py-3 font-medium text-white">
+                                <span className="inline-flex flex-wrap items-center gap-1">
+                                  {color.reference ? (
+                                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-200/80">
+                                      {color.reference}
+                                    </span>
+                                  ) : null}
+                                  {color.reference ? (
+                                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#cdbfb1]">-</span>
+                                  ) : null}
+                                  <span>{color.name}</span>
+                                </span>
+                              </td>
+                              {variantMatrixSizes.map((size) => {
+                                const quantity = getVariantMatrixQuantity(color.name, size, activeVariantWarehouseId);
+                                return (
+                                  <td key={`${color.name}-${size}`} className="px-4 py-3 text-center">
+                                    <span className={quantity > 0
+                                      ? "inline-flex min-w-[42px] items-center justify-center rounded-full bg-orange-300/14 px-2.5 py-1 text-xs font-semibold text-white"
+                                      : quantity < 0
+                                        ? "inline-flex min-w-[42px] items-center justify-center rounded-full border border-rose-300/30 bg-rose-400/10 px-2.5 py-1 text-xs font-semibold text-rose-100"
+                                      : "text-[#7d6f63]"}
+                                    >
+                                      {formatNumber(quantity)}
+                                    </span>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               ) : null}
             </div>

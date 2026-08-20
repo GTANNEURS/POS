@@ -156,6 +156,20 @@ function pickCentralWarehouseId(warehouses: Array<{ id: string; name: string; ty
     ?? null;
 }
 
+async function resolveCurrentUserWarehouse(currentUser: AuthenticatedRequest["currentUser"]) {
+  if (!currentUser?.id) return null;
+  const user = await prisma.user.findUnique({
+    where: { id: currentUser.id },
+    select: { defaultWarehouseId: true }
+  });
+  const warehouseId = user?.defaultWarehouseId ?? currentUser.defaultWarehouse?.id ?? null;
+  if (!warehouseId) return null;
+  return prisma.warehouse.findUnique({
+    where: { id: warehouseId },
+    select: { id: true, name: true, code: true, type: true }
+  });
+}
+
 async function ensureVariantMetaSeeded() {
   const [colorCount, sizeCount] = await Promise.all([prisma.color.count(), prisma.size.count()]);
 
@@ -499,11 +513,12 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
 
   if (!product) throw new AppError("Article introuvable.", 404);
   const scopedWarehouseId = getScopedWarehouseId(req.currentUser);
-  const sessionWarehouseId = scopedWarehouseId ?? req.currentUser?.defaultWarehouse?.id ?? null;
+  const currentUserWarehouse = await resolveCurrentUserWarehouse(req.currentUser);
+  const sessionWarehouseId = scopedWarehouseId ?? currentUserWarehouse?.id ?? null;
   const shouldExposeAllWarehouseBalances = isAdminUser(req.currentUser) && !sessionWarehouseId;
   const warehouses = await prisma.warehouse.findMany({ select: { id: true, name: true, type: true } });
   const preferredSeedWarehouseId = scopedWarehouseId
-    ?? req.currentUser?.defaultWarehouse?.id
+    ?? currentUserWarehouse?.id
     ?? (shouldExposeAllWarehouseBalances ? pickCentralWarehouseId(warehouses) : null)
     ?? product.warehouseId
     ?? undefined;
@@ -538,6 +553,9 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
 
   return ok(res, {
     ...product,
+    scopedWarehouse: sessionWarehouseId
+      ? currentUserWarehouse ?? warehouses.find((warehouse) => warehouse.id === sessionWarehouseId) ?? null
+      : null,
     stockOnHand: scopedStock,
     stockMovements: sessionWarehouseId
       ? product.stockMovements.filter((movement) => movement.warehouse?.id === sessionWarehouseId)
