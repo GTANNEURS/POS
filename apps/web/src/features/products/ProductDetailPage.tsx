@@ -158,20 +158,18 @@ export function ProductDetailPage() {
   }, [item?.name]);
   const isAdminSession = user?.roles.includes("admin") ?? false;
   const connectedWarehouseId = item?.scopedWarehouse?.id ?? user?.defaultWarehouse?.id ?? null;
-  const scopedWarehouseName = cleanWarehouseName(item?.scopedWarehouse?.name ?? user?.defaultWarehouse?.name ?? item?.warehouse?.name ?? null) || null;
+  const scopedWarehouseName = cleanWarehouseName(item?.scopedWarehouse?.name ?? user?.defaultWarehouse?.name ?? null) || null;
   const orderedLocationBalances = useMemo(() => {
     if (!item) return [];
     if (!connectedWarehouseId) return item.locationBalances;
     const current = item.locationBalances.find((location) => location.warehouseId === connectedWarehouseId);
-    const others = item.locationBalances.filter((location) => location.warehouseId !== connectedWarehouseId);
-    return current ? [current, ...others] : item.locationBalances;
+    return current ? [current] : [];
   }, [connectedWarehouseId, item]);
   const variantMatrixWarehouses = useMemo(() => {
     if (!item) return [];
     if (!connectedWarehouseId) return item.locationBalances;
     const current = item.locationBalances.find((location) => location.warehouseId === connectedWarehouseId);
-    const others = item.locationBalances.filter((location) => location.warehouseId !== connectedWarehouseId);
-    return current ? [current, ...others] : item.locationBalances;
+    return current ? [current] : [];
   }, [connectedWarehouseId, item]);
   const activeVariantWarehouseId = useMemo(() => {
     if (!variantMatrixWarehouses.length) return null;
@@ -339,7 +337,7 @@ export function ProductDetailPage() {
   }
 
   function isCurrentStockLocation(location: { warehouseId: string; warehouseName?: string | null }) {
-    return connectedWarehouseId ? location.warehouseId === connectedWarehouseId : isCentralWarehouseName(location.warehouseName);
+    return connectedWarehouseId ? location.warehouseId === connectedWarehouseId : false;
   }
 
   function openQuickStockModal() {

@@ -156,6 +156,21 @@ function pickCentralWarehouseId(warehouses: Array<{ id: string; name: string; ty
     ?? null;
 }
 
+async function readBoutiqueNameMap() {
+  const setting = await prisma.setting.findUnique({ where: { key: "boutiques_config" } });
+  if (!Array.isArray(setting?.value)) return new Map<string, string>();
+  const pairs = (setting.value as unknown[])
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const id = String(row.id ?? "").trim();
+      const name = String(row.name ?? "").trim();
+      return id && name ? [id, name] as const : null;
+    })
+    .filter((item): item is readonly [string, string] => Boolean(item));
+  return new Map(pairs);
+}
+
 async function resolveCurrentUserWarehouse(currentUser: AuthenticatedRequest["currentUser"]) {
   if (!currentUser?.id) return null;
   const user = await prisma.user.findUnique({
@@ -516,7 +531,11 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
   const currentUserWarehouse = await resolveCurrentUserWarehouse(req.currentUser);
   const sessionWarehouseId = scopedWarehouseId ?? currentUserWarehouse?.id ?? null;
   const shouldExposeAllWarehouseBalances = isAdminUser(req.currentUser) && !sessionWarehouseId;
-  const warehouses = await prisma.warehouse.findMany({ select: { id: true, name: true, type: true } });
+  const [warehouses, boutiqueNameMap] = await Promise.all([
+    prisma.warehouse.findMany({ select: { id: true, name: true, type: true } }),
+    readBoutiqueNameMap()
+  ]);
+  const displayWarehouseName = (warehouseId: string, fallback?: string | null) => boutiqueNameMap.get(warehouseId) ?? fallback ?? null;
   const preferredSeedWarehouseId = scopedWarehouseId
     ?? currentUserWarehouse?.id
     ?? (shouldExposeAllWarehouseBalances ? pickCentralWarehouseId(warehouses) : null)
@@ -527,7 +546,13 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
     ? await prisma.color.findMany({ where: { name: { in: variantColorNames } }, select: { name: true, reference: true } })
     : [];
   const colorReferenceMap = new Map(colors.map((color) => [color.name.trim().toLowerCase(), color.reference]));
-  const warehouseMap = new Map(warehouses.map((warehouse) => [warehouse.id, warehouse.name]));
+  const warehouseMap = new Map(warehouses.map((warehouse) => [warehouse.id, displayWarehouseName(warehouse.id, warehouse.name)]));
+  const scopedWarehouse = sessionWarehouseId
+    ? {
+        ...(currentUserWarehouse ?? warehouses.find((warehouse) => warehouse.id === sessionWarehouseId) ?? { id: sessionWarehouseId, code: "", type: "" }),
+        name: displayWarehouseName(sessionWarehouseId, currentUserWarehouse?.name ?? warehouses.find((warehouse) => warehouse.id === sessionWarehouseId)?.name) ?? "Boutique"
+      }
+    : null;
   const initialBalances = await readStockBalances();
   const initialVariantBalances = await readVariantStockBalances();
   let balances = initialBalances;
@@ -553,9 +578,7 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
 
   return ok(res, {
     ...product,
-    scopedWarehouse: sessionWarehouseId
-      ? currentUserWarehouse ?? warehouses.find((warehouse) => warehouse.id === sessionWarehouseId) ?? null
-      : null,
+    scopedWarehouse,
     stockOnHand: scopedStock,
     stockMovements: sessionWarehouseId
       ? product.stockMovements.filter((movement) => movement.warehouse?.id === sessionWarehouseId)
