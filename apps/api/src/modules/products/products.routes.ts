@@ -499,9 +499,11 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
 
   if (!product) throw new AppError("Article introuvable.", 404);
   const scopedWarehouseId = getScopedWarehouseId(req.currentUser);
-  const shouldExposeAllWarehouseBalances = isAdminUser(req.currentUser);
+  const sessionWarehouseId = scopedWarehouseId ?? req.currentUser?.defaultWarehouse?.id ?? null;
+  const shouldExposeAllWarehouseBalances = isAdminUser(req.currentUser) && !sessionWarehouseId;
   const warehouses = await prisma.warehouse.findMany({ select: { id: true, name: true, type: true } });
   const preferredSeedWarehouseId = scopedWarehouseId
+    ?? req.currentUser?.defaultWarehouse?.id
     ?? (shouldExposeAllWarehouseBalances ? pickCentralWarehouseId(warehouses) : null)
     ?? product.warehouseId
     ?? undefined;
@@ -527,18 +529,18 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
   }
   const variantIds = product.variants.map((variant) => variant.id);
   const scopedStock = variantIds.length
-    ? scopedWarehouseId
-      ? getProductLocationStockFromVariantBalances(variantIds, variantBalances, scopedWarehouseId)
+    ? sessionWarehouseId
+      ? getProductLocationStockFromVariantBalances(variantIds, variantBalances, sessionWarehouseId)
       : getProductStockTotalFromVariantBalances(variantIds, variantBalances)
-    : scopedWarehouseId
-      ? getLocationStock(balances, product.id, scopedWarehouseId)
+    : sessionWarehouseId
+      ? getLocationStock(balances, product.id, sessionWarehouseId)
       : getProductStockTotal(balances, product.id);
 
   return ok(res, {
     ...product,
     stockOnHand: scopedStock,
-    stockMovements: scopedWarehouseId
-      ? product.stockMovements.filter((movement) => movement.warehouse?.id === scopedWarehouseId)
+    stockMovements: sessionWarehouseId
+      ? product.stockMovements.filter((movement) => movement.warehouse?.id === sessionWarehouseId)
       : product.stockMovements,
     locationBalances: (variantIds.length
       ? warehouses.map((warehouse) => ({
@@ -553,7 +555,7 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
             warehouseName: warehouseMap.get(entry.warehouseId) ?? null,
             quantity: entry.quantity
           })))
-      .filter((entry) => shouldExposeAllWarehouseBalances || entry.quantity > 0 || entry.warehouseId === scopedWarehouseId),
+      .filter((entry) => sessionWarehouseId ? entry.warehouseId === sessionWarehouseId : shouldExposeAllWarehouseBalances || entry.quantity > 0),
     variants: product.variants.map((variant) => ({
       ...variant,
       colorReference: variant.color ? (colorReferenceMap.get(variant.color.trim().toLowerCase()) ?? null) : null,
@@ -564,7 +566,7 @@ productsRouter.get("/:id", requirePermissions("products_manage"), asyncHandler(a
           warehouseName: warehouseMap.get(warehouse.id) ?? null,
           quantity: getVariantLocationStock(variantBalances, variant.id, warehouse.id)
         }))
-        .filter((entry) => shouldExposeAllWarehouseBalances || entry.quantity > 0 || entry.warehouseId === scopedWarehouseId)
+        .filter((entry) => sessionWarehouseId ? entry.warehouseId === sessionWarehouseId : shouldExposeAllWarehouseBalances || entry.quantity > 0)
     }))
   });
 }));

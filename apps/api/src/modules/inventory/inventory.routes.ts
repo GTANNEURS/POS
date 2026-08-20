@@ -87,24 +87,6 @@ function isTransferNotification(value: unknown): value is InventoryTransferNotif
     && Array.isArray(notification.readByUserIds);
 }
 
-function normalizeWarehouseName(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
-async function resolveAdminAdjustmentWarehouseId(fallbackWarehouseId: string) {
-  const warehouses = await prisma.warehouse.findMany({
-    orderBy: [{ type: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, type: true }
-  });
-  return warehouses.find((warehouse) => normalizeWarehouseName(warehouse.name).includes("depot central"))?.id
-    ?? warehouses.find((warehouse) => warehouse.type === "WAREHOUSE")?.id
-    ?? fallbackWarehouseId;
-}
-
 async function readTransferNotifications(db: SettingsDb) {
   const setting = await db.setting.findUnique({ where: { key: INVENTORY_TRANSFER_NOTIFICATIONS_KEY } });
   if (!Array.isArray(setting?.value)) return [];
@@ -367,7 +349,7 @@ inventoryRouter.post("/adjustments", asyncHandler(async (req: AuthenticatedReque
     throw new AppError("Ajustement reserve a l'administrateur.", 403);
   }
   const payload = adjustmentSchema.parse(req.body);
-  const targetWarehouseId = await resolveAdminAdjustmentWarehouseId(payload.warehouseId);
+  const targetWarehouseId = payload.warehouseId;
   ensureWarehouseAccess(req.currentUser, targetWarehouseId);
   const product = await prisma.product.findUnique({ where: { id: payload.productId }, include: { variants: true } });
   if (!product) throw new AppError("Article introuvable.", 404);

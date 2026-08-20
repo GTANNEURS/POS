@@ -158,14 +158,13 @@ export function InventoryPage() {
   async function submitAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (adjustmentBlocked) return;
-    const targetWarehouseId = isAdminSession ? centralWarehouse?.id ?? form.warehouseId : form.warehouseId;
     setSaving(true);
     await api("/inventory/adjustments", {
       method: "POST",
       body: JSON.stringify({
         productId: form.productId,
         variantId: form.variantId || null,
-        warehouseId: targetWarehouseId,
+        warehouseId: form.warehouseId,
         quantity: Number(form.quantity),
         reason: form.reason
       })
@@ -326,11 +325,11 @@ export function InventoryPage() {
     [warehouses]
   );
   const centralWarehouse = useMemo(() => findCentralWarehouse(displayWarehouses), [displayWarehouses]);
-  const currentWarehouseId = isAdminSession ? centralWarehouse?.id ?? null : user?.defaultWarehouse?.id ?? null;
+  const currentWarehouseId = user?.defaultWarehouse?.id ?? centralWarehouse?.id ?? null;
   useEffect(() => {
-    if (!isAdminSession || !centralWarehouse?.id) return;
-    setForm((current) => current.warehouseId === centralWarehouse.id ? current : { ...current, warehouseId: centralWarehouse.id });
-  }, [centralWarehouse?.id, isAdminSession]);
+    if (!currentWarehouseId) return;
+    setForm((current) => current.warehouseId === currentWarehouseId ? current : { ...current, warehouseId: currentWarehouseId });
+  }, [currentWarehouseId]);
   const orderedWarehouses = useMemo(() => {
     if (!currentWarehouseId) return displayWarehouses;
     const currentWarehouse = displayWarehouses.find((warehouse) => warehouse.id === currentWarehouseId);
@@ -338,10 +337,8 @@ export function InventoryPage() {
     return currentWarehouse ? [currentWarehouse, ...otherWarehouses] : displayWarehouses;
   }, [currentWarehouseId, displayWarehouses]);
   const operationalWarehouses = useMemo(
-    () => isAdminSession
-      ? orderedWarehouses.filter((warehouse) => warehouse.id === currentWarehouseId)
-      : orderedWarehouses.filter((warehouse) => warehouse.id === currentWarehouseId),
-    [currentWarehouseId, isAdminSession, orderedWarehouses]
+    () => currentWarehouseId ? orderedWarehouses.filter((warehouse) => warehouse.id === currentWarehouseId) : orderedWarehouses,
+    [currentWarehouseId, orderedWarehouses]
   );
   const canAdjustStock = user?.roles.includes("admin") ?? false;
   const canTransferStock = (user?.permissions.includes("inventory_manage") ?? false) && orderedWarehouses.length > 1;
@@ -471,7 +468,7 @@ export function InventoryPage() {
   }
 
   function openAdjustmentModal() {
-    const targetWarehouseId = isAdminSession ? centralWarehouse?.id ?? "" : user?.defaultWarehouse?.id ?? form.warehouseId;
+    const targetWarehouseId = currentWarehouseId ?? form.warehouseId;
     setAdjustmentModalOpen(true);
     setAdjustmentSearch("");
     setForm((current) => ({

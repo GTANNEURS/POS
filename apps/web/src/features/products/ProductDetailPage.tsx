@@ -156,31 +156,22 @@ export function ProductDetailPage() {
       .join("") || "AR";
   }, [item?.name]);
   const isAdminSession = user?.roles.includes("admin") ?? false;
-  const scopedWarehouseName = !isAdminSession ? cleanWarehouseName(user?.defaultWarehouse?.name ?? item?.warehouse?.name ?? null) : null;
+  const connectedWarehouseId = user?.defaultWarehouse?.id ?? null;
+  const scopedWarehouseName = cleanWarehouseName(user?.defaultWarehouse?.name ?? item?.warehouse?.name ?? null) || null;
   const orderedLocationBalances = useMemo(() => {
     if (!item) return [];
-    if (isAdminSession) {
-      const central = item.locationBalances.find((location) => isCentralWarehouseName(location.warehouseName));
-      const others = item.locationBalances.filter((location) => !isCentralWarehouseName(location.warehouseName));
-      return central ? [central, ...others] : item.locationBalances;
-    }
-    if (!user?.defaultWarehouse?.id) return item.locationBalances;
-    const current = item.locationBalances.find((location) => location.warehouseId === user.defaultWarehouse?.id);
-    const others = item.locationBalances.filter((location) => location.warehouseId !== user.defaultWarehouse?.id);
+    if (!connectedWarehouseId) return item.locationBalances;
+    const current = item.locationBalances.find((location) => location.warehouseId === connectedWarehouseId);
+    const others = item.locationBalances.filter((location) => location.warehouseId !== connectedWarehouseId);
     return current ? [current, ...others] : item.locationBalances;
-  }, [isAdminSession, item, user?.defaultWarehouse?.id]);
+  }, [connectedWarehouseId, item]);
   const variantMatrixWarehouses = useMemo(() => {
     if (!item) return [];
-    if (isAdminSession) {
-      const central = item.locationBalances.find((location) => isCentralWarehouseName(location.warehouseName));
-      const others = item.locationBalances.filter((location) => !isCentralWarehouseName(location.warehouseName));
-      return central ? [central, ...others] : item.locationBalances;
-    }
-    if (!user?.defaultWarehouse?.id) return item.locationBalances;
-    const current = item.locationBalances.find((location) => location.warehouseId === user.defaultWarehouse?.id);
-    const others = item.locationBalances.filter((location) => location.warehouseId !== user.defaultWarehouse?.id);
+    if (!connectedWarehouseId) return item.locationBalances;
+    const current = item.locationBalances.find((location) => location.warehouseId === connectedWarehouseId);
+    const others = item.locationBalances.filter((location) => location.warehouseId !== connectedWarehouseId);
     return current ? [current, ...others] : item.locationBalances;
-  }, [isAdminSession, item, user?.defaultWarehouse?.id]);
+  }, [connectedWarehouseId, item]);
   const variantMatrixColors = useMemo(() => {
     if (!item) return [];
     const colorMap = new Map<string, { name: string; reference?: string | null }>();
@@ -242,13 +233,6 @@ export function ProductDetailPage() {
   }, [selectedLabelOption]);
   const quickStockWarehouse = useMemo(() => {
     if (!item) return null;
-    if (isAdminSession) {
-      const locations = [
-        ...item.locationBalances,
-        ...item.variants.flatMap((variant) => variant.locationBalances)
-      ];
-      return locations.find((location) => isCentralWarehouseName(location.warehouseName)) ?? activeVariantWarehouse;
-    }
     if (user?.defaultWarehouse?.id) {
       return {
         warehouseId: user.defaultWarehouse.id,
@@ -256,9 +240,9 @@ export function ProductDetailPage() {
       };
     }
     return activeVariantWarehouse;
-  }, [activeVariantWarehouse, isAdminSession, item, user?.defaultWarehouse?.id, user?.defaultWarehouse?.name]);
+  }, [activeVariantWarehouse, item, user?.defaultWarehouse?.id, user?.defaultWarehouse?.name]);
   const quickStockWarehouseId = quickStockWarehouse?.warehouseId ?? null;
-  const quickStockWarehouseName = cleanWarehouseName(quickStockWarehouse?.warehouseName ?? null) || (isAdminSession ? "Dépôt Central" : "Boutique non definie");
+  const quickStockWarehouseName = cleanWarehouseName(quickStockWarehouse?.warehouseName ?? null) || "Boutique cible non definie";
   const quickStockRows = useMemo(() => {
     if (!item) return [];
     return item.variants.map((variant) => {
@@ -315,14 +299,9 @@ export function ProductDetailPage() {
       if (current && variantMatrixWarehouses.some((location) => location.warehouseId === current)) {
         return current;
       }
-      if (isAdminSession) {
-        return variantMatrixWarehouses.find((location) => isCentralWarehouseName(location.warehouseName))?.warehouseId
-          ?? variantMatrixWarehouses[0]?.warehouseId
-          ?? null;
-      }
-      return user?.defaultWarehouse?.id ?? variantMatrixWarehouses[0]?.warehouseId ?? null;
+      return connectedWarehouseId ?? variantMatrixWarehouses[0]?.warehouseId ?? null;
     });
-  }, [isAdminSession, user?.defaultWarehouse?.id, variantMatrixWarehouses]);
+  }, [connectedWarehouseId, variantMatrixWarehouses]);
 
   useEffect(() => {
     if (!labelOptions.length) {
@@ -349,9 +328,7 @@ export function ProductDetailPage() {
   }
 
   function isCurrentStockLocation(location: { warehouseId: string; warehouseName?: string | null }) {
-    return isAdminSession
-      ? isCentralWarehouseName(location.warehouseName)
-      : location.warehouseId === user?.defaultWarehouse?.id;
+    return connectedWarehouseId ? location.warehouseId === connectedWarehouseId : isCentralWarehouseName(location.warehouseName);
   }
 
   function openQuickStockModal() {
