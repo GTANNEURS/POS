@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Plus, Search, X } from "lucide-react";
+import { Plus, ScanLine, Search, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { formatCurrency, formatDate, formatNumber } from "../../lib/format";
 import { buildPurchaseDocumentsHtml, normalizeCompanySettings } from "./print";
 import { Badge, Button, EmptyState, Field, Input, LoadingBlock, PageHeader, SectionCard, Select } from "../../components/ui/primitives";
+import { useAuth } from "../../providers/AuthProvider";
 
 type PurchaseStatus = "DRAFT" | "ORDERED" | "RECEIVED" | "INVOICED" | "CANCELLED";
 
@@ -112,6 +113,23 @@ function nextPurchaseNumber(items: Purchase[]) {
   const year = new Date().getFullYear();
   const sequence = String(items.filter((item) => item.number.includes(String(year))).length + 1).padStart(4, "0");
   return `BC-${year}-${sequence}`;
+}
+
+function nextReceiptNumber(items: Purchase[]) {
+  const year = new Date().getFullYear();
+  const sequence = String(items.filter((item) => item.number.startsWith(`BR-${year}-`)).length + 1).padStart(4, "0");
+  return `BR-${year}-${sequence}`;
+}
+
+function productToOrderLine(product: Product): OrderLine {
+  return {
+    productId: product.id,
+    productName: product.name,
+    quantity: "1",
+    unitCostHt: String(product.purchasePriceHt),
+    unitCostTtc: String(product.purchasePriceTtc),
+    taxRate: String(product.taxRate)
+  };
 }
 
 type SupplierCreditNoteForm = {
@@ -415,6 +433,7 @@ function SelectionToolbar({
 
 function PurchaseOrderModal({
   open,
+  documentType = "order",
   form,
   suppliers,
   warehouses,
@@ -429,9 +448,11 @@ function PurchaseOrderModal({
   onLineTaxRateChange,
   onAddLine,
   onRemoveLine,
-  onProductPick
+  onProductPick,
+  onScanProduct
 }: {
   open: boolean;
+  documentType?: "order" | "receipt";
   form: PurchaseForm;
   suppliers: Supplier[];
   warehouses: Warehouse[];
@@ -447,14 +468,19 @@ function PurchaseOrderModal({
   onAddLine: () => void;
   onRemoveLine: (index: number) => void;
   onProductPick: (index: number, product: Product) => void;
+  onScanProduct?: (product: Product) => void;
 }) {
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
   const [pickerSearch, setPickerSearch] = useState("");
+  const [scanValue, setScanValue] = useState("");
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setPickerIndex(null);
       setPickerSearch("");
+      setScanValue("");
+      setScanMessage(null);
     }
   }, [open]);
 
@@ -483,6 +509,25 @@ function PurchaseOrderModal({
     return acc;
   }, { totalHt: 0, totalTtc: 0 });
   const taxAmount = totals.totalTtc - totals.totalHt;
+  const isReceiptMode = documentType === "receipt";
+
+  function handleBarcodeScan() {
+    const query = scanValue.trim().toLowerCase();
+    if (!query) {
+      setScanMessage("Scanne ou saisis un code-barres.");
+      return;
+    }
+
+    const product = products.find((item) => [item.barcode ?? "", item.reference, item.name].some((value) => String(value).trim().toLowerCase() === query));
+    if (!product) {
+      setScanMessage("Article introuvable pour ce code-barres.");
+      return;
+    }
+
+    onScanProduct?.(product);
+    setScanValue("");
+    setScanMessage(`${product.reference} ajoute au bon de reception.`);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#050403]/82 p-4 backdrop-blur-[2px]" onMouseDown={onClose}>
@@ -490,7 +535,7 @@ function PurchaseOrderModal({
         <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-5 py-4 md:px-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-orange-300/75">Achats</p>
-            <h2 className="mt-1 text-xl font-semibold text-white">Nouveau BC</h2>
+            <h2 className="mt-1 text-xl font-semibold text-white">{isReceiptMode ? "Nouveau bon de reception" : "Nouveau BC"}</h2>
           </div>
           <button type="button" className="btn-ghost !h-10 !w-10 !rounded-full !p-0" onClick={onClose} aria-label="Fermer">
             <X className="h-4 w-4" />
@@ -502,8 +547,43 @@ function PurchaseOrderModal({
             <Field label="Numero"><Input value={form.number} onChange={(event) => onChange("number", event.target.value)} /></Field>
             <Field label="Fournisseur"><Select value={form.supplierId} onChange={(event) => onChange("supplierId", event.target.value)}><option value="">Choisir</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</Select></Field>
             <Field label="Depot / magasin"><Select value={form.warehouseId} onChange={(event) => onChange("warehouseId", event.target.value)}><option value="">Choisir</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select></Field>
-            <Field label="Statut"><Select value={form.status} onChange={(event) => onChange("status", event.target.value as PurchaseForm["status"])}><option value="DRAFT">Brouillon</option><option value="ORDERED">Commande</option><option value="CANCELLED">Annulee</option></Select></Field>
+            {isReceiptMode ? (
+              <div className="rounded-[20px] border border-emerald-300/20 bg-emerald-400/10 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100">Statut</p>
+                <p className="mt-2 font-semibold text-white">Reception directe</p>
+              </div>
+            ) : (
+              <Field label="Statut"><Select value={form.status} onChange={(event) => onChange("status", event.target.value as PurchaseForm["status"])}><option value="DRAFT">Brouillon</option><option value="ORDERED">Commande</option><option value="CANCELLED">Annulee</option></Select></Field>
+            )}
           </div>
+
+          {isReceiptMode ? (
+            <div className="rounded-[24px] border border-orange-300/20 bg-[linear-gradient(135deg,rgba(255,146,35,0.14),rgba(255,255,255,0.03))] p-4">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_170px]">
+                <Field label="Scanner article">
+                  <Input
+                    autoFocus
+                    value={scanValue}
+                    placeholder="Scanner code-barres ou saisir reference..."
+                    onChange={(event) => setScanValue(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleBarcodeScan();
+                      }
+                    }}
+                  />
+                </Field>
+                <div className="flex items-end">
+                  <Button type="button" className="w-full !h-11" onClick={handleBarcodeScan}>
+                    <ScanLine className="mr-2 h-4 w-4" />
+                    Ajouter
+                  </Button>
+                </div>
+              </div>
+              {scanMessage ? <p className="mt-3 text-sm font-medium text-orange-100">{scanMessage}</p> : null}
+            </div>
+          ) : null}
 
           <div className="overflow-hidden rounded-[24px] border border-white/10 bg-black/15">
             <div className="overflow-x-auto">
@@ -583,7 +663,7 @@ function PurchaseOrderModal({
             <Button variant="secondary" type="button" className="!h-9 !px-3.5 !text-[12px]" onClick={onAddLine}>Ajouter une ligne</Button>
             <div className="flex gap-3">
               <Button variant="secondary" type="button" className="!h-9 !px-3.5 !text-[12px]" onClick={onClose}>Annuler</Button>
-              <Button type="submit" className="!h-9 !px-3.5 !text-[12px]">{saving ? "Enregistrement..." : "Enregistrer"}</Button>
+              <Button type="submit" className="!h-9 !px-3.5 !text-[12px]">{saving ? "Enregistrement..." : isReceiptMode ? "Valider BR" : "Enregistrer"}</Button>
             </div>
           </div>
         </form>
@@ -689,6 +769,7 @@ function PurchasesTable({
 
 function PurchasesPage({ mode }: { mode: "orders" | "receipts" }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [items, setItems] = useState<Purchase[]>([]);
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -698,6 +779,7 @@ function PurchasesPage({ mode }: { mode: "orders" | "receipts" }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<PurchaseForm>(defaultForm());
+  const canCreateDirectReceipt = user?.roles.includes("admin") ?? false;
 
   const visibleStatuses = mode === "orders" ? ["DRAFT", "ORDERED", "CANCELLED"] : ["RECEIVED"];
 
@@ -806,7 +888,7 @@ function PurchasesPage({ mode }: { mode: "orders" | "receipts" }) {
 
   function openCreateModal() {
     setError(null);
-    setForm({ ...defaultForm(), number: nextPurchaseNumber(items) });
+    setForm({ ...defaultForm(), number: mode === "receipts" ? nextReceiptNumber(items) : nextPurchaseNumber(items) });
     setModalOpen(true);
   }
 
@@ -831,6 +913,29 @@ function PurchasesPage({ mode }: { mode: "orders" | "receipts" }) {
 
   function openDetails(id: string) {
     navigate(`/achat/bon-de-commande/${id}`);
+  }
+
+  function addScannedProduct(product: Product) {
+    setForm((current) => {
+      const existingIndex = current.lines.findIndex((line) => line.productId === product.id);
+      if (existingIndex >= 0) {
+        return {
+          ...current,
+          lines: current.lines.map((line, index) => index === existingIndex ? { ...line, quantity: String((Number(line.quantity || 0) || 0) + 1) } : line)
+        };
+      }
+
+      const emptyIndex = current.lines.findIndex((line) => !line.productId && !line.productName.trim());
+      const nextLine = productToOrderLine(product);
+      if (emptyIndex >= 0) {
+        return {
+          ...current,
+          lines: current.lines.map((line, index) => index === emptyIndex ? nextLine : line)
+        };
+      }
+
+      return { ...current, lines: [...current.lines, nextLine] };
+    });
   }
 
   function previewSelection(shouldPrint = false) {
@@ -895,13 +1000,13 @@ function PurchasesPage({ mode }: { mode: "orders" | "receipts" }) {
     setSaving(true);
     setError(null);
     try {
-      await api("/purchases", {
+      await api(mode === "receipts" ? "/purchases/direct-receipt" : "/purchases", {
         method: "POST",
         body: JSON.stringify({
           number: form.number,
           supplierId: form.supplierId,
           warehouseId: form.warehouseId,
-          status: form.status,
+          ...(mode === "orders" ? { status: form.status } : {}),
           items: preparedLines.map((line) => ({
             productId: line.productId || null,
             productName: line.productName.trim(),
@@ -936,6 +1041,7 @@ function PurchasesPage({ mode }: { mode: "orders" | "receipts" }) {
             <>
               <Button variant="secondary" className="!h-9 !px-3.5 !text-[13px]" onClick={() => void load()}>Actualiser</Button>
               {mode === "orders" ? <Button className="!h-9 !px-3.5 !text-[13px]" onClick={openCreateModal}><Plus className="mr-2 h-4 w-4" />Nouveau BC</Button> : null}
+              {mode === "receipts" && canCreateDirectReceipt ? <Button className="!h-9 !px-3.5 !text-[13px]" onClick={openCreateModal}><Plus className="mr-2 h-4 w-4" />Nouveau BR</Button> : null}
             </>
           }
         />
@@ -963,7 +1069,9 @@ function PurchasesPage({ mode }: { mode: "orders" | "receipts" }) {
               compact
               title={mode === "orders" ? "Aucun bon de commande" : "Aucun bon de reception"}
               description={mode === "orders" ? "Cree un premier BC pour demarrer les achats." : "Aucun BR disponible pour le moment."}
-              action={mode === "orders" ? <Button className="!h-9 !px-3.5 !text-[13px]" onClick={openCreateModal}>Nouveau BC</Button> : undefined}
+              action={mode === "orders"
+                ? <Button className="!h-9 !px-3.5 !text-[13px]" onClick={openCreateModal}>Nouveau BC</Button>
+                : canCreateDirectReceipt ? <Button className="!h-9 !px-3.5 !text-[13px]" onClick={openCreateModal}>Nouveau BR</Button> : undefined}
             />
           ) : (
             <PurchasesTable items={filtered} selected={selected} onToggle={toggleSelect} onToggleAll={toggleAllVisible} onOpen={openDetails} />
@@ -972,7 +1080,8 @@ function PurchasesPage({ mode }: { mode: "orders" | "receipts" }) {
       </div>
 
       <PurchaseOrderModal
-        open={mode === "orders" && modalOpen}
+        open={modalOpen}
+        documentType={mode === "receipts" ? "receipt" : "order"}
         form={form}
         suppliers={bootstrap?.suppliers ?? []}
         warehouses={bootstrap?.warehouses ?? []}
@@ -994,6 +1103,7 @@ function PurchasesPage({ mode }: { mode: "orders" | "receipts" }) {
           unitCostTtc: String(product.purchasePriceTtc),
           taxRate: String(product.taxRate)
         })}
+        onScanProduct={addScannedProduct}
       />
     </>
   );

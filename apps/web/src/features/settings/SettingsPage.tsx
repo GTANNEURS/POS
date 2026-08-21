@@ -533,6 +533,8 @@ export function SettingsPage() {
   const [newColorOpen, setNewColorOpen] = useState(false);
   const [newColor, setNewColor] = useState({ reference: "", name: "", type: "Maroquinerie", isAvailable: true });
   const [colorSubTab, setColorSubTab] = useState<ReferenceSubTab>("elements");
+  const [colorTypeFilter, setColorTypeFilter] = useState("");
+  const [colorSearch, setColorSearch] = useState("");
   const [newColorType, setNewColorType] = useState("");
   const [editingColorType, setEditingColorType] = useState<string | null>(null);
   const [colorTypeDraft, setColorTypeDraft] = useState("");
@@ -1814,6 +1816,14 @@ export function SettingsPage() {
     );
   }
 
+  const normalizedColorSearch = colorSearch.trim().toLowerCase();
+  const filteredColors = colors.filter((color) => {
+    const matchesType = !colorTypeFilter || color.type === colorTypeFilter;
+    const haystack = [color.reference, color.name].join(" ").toLowerCase();
+    const matchesSearch = !normalizedColorSearch || haystack.includes(normalizedColorSearch);
+    return matchesType && matchesSearch;
+  });
+
   if (loading) return <LoadingBlock label="Chargement des parametres..." />;
 
   return (
@@ -2256,17 +2266,44 @@ export function SettingsPage() {
                   <Button className="mt-4 !px-3 !py-2 text-xs" type="submit" disabled={saving}>{saving ? "Creation..." : "Enregistrer"}</Button>
                 </form>
               ) : null}
+              <div className="mb-4 grid gap-3 rounded-[22px] border border-white/10 bg-black/20 p-3 md:grid-cols-[220px_minmax(0,1fr)_auto]">
+                <Field label="Filtrer par type">
+                  <select className="input-base" value={colorTypeFilter} onChange={(e) => setColorTypeFilter(e.target.value)}>
+                    <option value="">Tous les types</option>
+                    {colorTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </Field>
+                <Field label="Recherche couleur">
+                  <Input value={colorSearch} onChange={(e) => setColorSearch(e.target.value)} placeholder="Reference ou nom de couleur..." />
+                </Field>
+                <div className="flex items-end">
+                  <Button
+                    className="!h-11 !px-3.5 !text-xs"
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setColorTypeFilter("");
+                      setColorSearch("");
+                    }}
+                  >
+                    Reinitialiser
+                  </Button>
+                </div>
+                <div className="md:col-span-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#cbb9a8]">
+                  {filteredColors.length} couleur(s) affichee(s) sur {colors.length}
+                </div>
+              </div>
               <div className="overflow-hidden rounded-[24px] border border-white/10">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-white/5 text-xs uppercase tracking-[0.22em] text-[#d9c5b1]"><tr><th className="px-4 py-3">Code</th><th className="px-4 py-3">Couleur</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Statut</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                   <tbody className="divide-y divide-white/10">
-                    {colors.map((color) => {
+                    {filteredColors.map((color) => {
                       const editing = editingColorId === color.id;
                       return <tr key={color.id} className="transition hover:bg-white/5"><td className="px-4 py-3">{editing ? <Input value={color.reference} onChange={(e) => updateColor(color.id, { reference: e.target.value })} /> : <span className="font-semibold text-white">{color.reference}</span>}</td><td className="px-4 py-3">{editing ? <Input value={color.name} onChange={(e) => updateColor(color.id, { name: e.target.value })} /> : <span className="text-[#eadccf]">{color.name}</span>}</td><td className="px-4 py-3">{editing ? <select className="input-base" value={color.type} onChange={(e) => updateColor(color.id, { type: e.target.value })}>{colorTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select> : <span className="badge">{color.type}</span>}</td><td className="px-4 py-3">{editing ? <select className="input-base" value={color.isAvailable ? "available" : "out"} onChange={(e) => updateColor(color.id, { isAvailable: e.target.value === "available" })}><option value="available">Disponible</option><option value="out">Rupture</option></select> : <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${color.isAvailable ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-100" : "border-red-300/30 bg-red-400/15 text-red-100"}`}>{color.isAvailable ? "Disponible" : "Rupture"}</span>}</td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2">{editing ? <Button className="!px-3 !py-2 text-xs" type="button" onClick={() => void saveColor(color)}>Sauvegarder</Button> : <Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => setEditingColorId(color.id)}>Modifier</Button>}<Button className="!px-3 !py-2 text-xs" type="button" variant="secondary" onClick={() => void deleteColor(color)}>Supprimer</Button></div></td></tr>;
                     })}
                   </tbody>
                 </table>
-                {!colors.length ? <div className="p-6 text-center text-sm text-[#d8cabc]">Aucune couleur trouvee.</div> : null}
+                {!filteredColors.length ? <div className="p-6 text-center text-sm text-[#d8cabc]">Aucune couleur trouvee pour ces filtres.</div> : null}
               </div>
             </SectionCard>
           ) : (

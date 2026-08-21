@@ -8,6 +8,7 @@ import {
   type AuthenticatedRequest,
   ensureWarehouseAccess,
   getScopedWarehouseId,
+  isAdminUser,
   requirePermissions
 } from "../../common/auth.js";
 import { writeAuditLog } from "../../common/audit.js";
@@ -33,6 +34,13 @@ const purchaseSchema = z.object({
   supplierId: z.string(),
   warehouseId: z.string(),
   status: z.enum(["DRAFT", "ORDERED", "RECEIVED", "INVOICED", "CANCELLED"]).default("DRAFT"),
+  items: z.array(itemSchema).min(1)
+});
+
+const directReceiptSchema = z.object({
+  number: z.string().trim().optional().nullable(),
+  supplierId: z.string(),
+  warehouseId: z.string(),
   items: z.array(itemSchema).min(1)
 });
 
@@ -160,6 +168,35 @@ async function nextSupplierInvoiceNumber(tx: DbClient) {
   });
 
   return `${prefix}${String(count + 1).padStart(4, "0")}`;
+}
+
+async function applyPurchaseReceiptStock(tx: Prisma.TransactionClient, purchase: { id: string; warehouseId: string; items: Array<{ productId: string; quantity: number }> }) {
+  let balances = await readStockBalances(tx);
+
+  for (const item of purchase.items) {
+    const product = await tx.product.findUniqueOrThrow({ where: { id: item.productId } });
+    balances = await ensureProductStockSeeded(tx, balances, product, purchase.warehouseId);
+    const beforeLocationStock = getLocationStock(balances, product.id, purchase.warehouseId);
+    balances = applyLocationDelta(balances, product.id, purchase.warehouseId, item.quantity);
+    const afterStock = product.stockOnHand + item.quantity;
+
+    await tx.product.update({ where: { id: product.id }, data: { stockOnHand: afterStock } });
+    await tx.stockMovement.create({
+      data: {
+        productId: product.id,
+        warehouseId: purchase.warehouseId,
+        type: "IN",
+        quantity: item.quantity,
+        beforeStock: beforeLocationStock,
+        afterStock: beforeLocationStock + item.quantity,
+        referenceType: "purchase",
+        referenceId: purchase.id,
+        notes: "Reception fournisseur"
+      }
+    });
+  }
+
+  await saveStockBalances(tx, balances);
 }
 
 async function readSupplierInvoiceMeta(db: Pick<DbClient, "setting"> = prisma) {
@@ -549,6 +586,53 @@ purchasesRouter.post("/", asyncHandler(async (req: AuthenticatedRequest, res) =>
   return ok(res, purchase, "Bon de commande cree.");
 }));
 
+purchasesRouter.post("/direct-receipt", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  if (!isAdminUser(req.currentUser)) {
+    throw new AppError("Seuls les administrateurs peuvent creer un bon de reception direct.", 403);
+  }
+
+  const payload = directReceiptSchema.parse(req.body);
+  ensureWarehouseAccess(req.currentUser, payload.warehouseId);
+  const { subtotal, taxAmount, totalAmount } = computeTotals(payload.items);
+
+  const purchase = await prisma.$transaction(async (tx) => {
+    const resolvedItems = await resolvePurchaseItems(tx, payload.items, payload.warehouseId);
+    const receiptNumber = payload.number?.trim() || await nextReceiptNumber(tx);
+    const created = await tx.purchase.create({
+      data: {
+        number: receiptNumber,
+        supplierId: payload.supplierId,
+        warehouseId: payload.warehouseId,
+        status: "RECEIVED",
+        subtotal,
+        taxAmount,
+        totalAmount,
+        amountDue: totalAmount,
+        orderedAt: new Date(),
+        receivedAt: new Date(),
+        createdById: req.currentUser?.id,
+        items: {
+          create: resolvedItems.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            unitCostHt: item.unitCostHt,
+            unitCostTtc: item.unitCostTtc,
+            taxRate: item.taxRate,
+            lineTotal: item.unitCostTtc * item.quantity
+          }))
+        }
+      },
+      include: { items: true, supplier: true, warehouse: true }
+    });
+
+    await applyPurchaseReceiptStock(tx, created);
+    return created;
+  });
+
+  await writeAuditLog({ userId: req.currentUser?.id, action: "purchases.direct_receipt", entityType: "purchase", entityId: purchase.id, meta: payload });
+  return ok(res, purchase, "Bon de reception cree et valide.");
+}));
+
 purchasesRouter.put("/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
   const purchaseId = String(req.params.id);
   const payload = purchaseSchema.parse(req.body);
@@ -621,29 +705,7 @@ purchasesRouter.post("/:id/receive", asyncHandler(async (req: AuthenticatedReque
   await prisma.$transaction(async (tx) => {
     const receiptNumber = await nextReceiptNumber(tx);
     await tx.purchase.update({ where: { id: purchase.id }, data: { number: receiptNumber, status: "RECEIVED", receivedAt: new Date() } });
-    for (const item of purchase.items) {
-      const product = await tx.product.findUniqueOrThrow({ where: { id: item.productId } });
-      let balances = await readStockBalances(tx);
-      balances = await ensureProductStockSeeded(tx, balances, product, purchase.warehouseId);
-      const beforeLocationStock = getLocationStock(balances, product.id, purchase.warehouseId);
-      balances = applyLocationDelta(balances, product.id, purchase.warehouseId, item.quantity);
-      await saveStockBalances(tx, balances);
-      const afterStock = product.stockOnHand + item.quantity;
-      await tx.product.update({ where: { id: product.id }, data: { stockOnHand: afterStock } });
-      await tx.stockMovement.create({
-        data: {
-          productId: product.id,
-          warehouseId: purchase.warehouseId,
-          type: "IN",
-          quantity: item.quantity,
-          beforeStock: beforeLocationStock,
-          afterStock: beforeLocationStock + item.quantity,
-          referenceType: "purchase",
-          referenceId: purchase.id,
-          notes: "Reception fournisseur"
-        }
-      });
-    }
+    await applyPurchaseReceiptStock(tx, purchase);
   });
 
   await writeAuditLog({ userId: req.currentUser?.id, action: "purchases.receive", entityType: "purchase", entityId: purchase.id });

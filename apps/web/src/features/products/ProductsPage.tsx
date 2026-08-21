@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Sparkles, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Sparkles, Pencil, Plus, Printer, Trash2, Upload, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
+import { buildCode39Svg, canEncodeCode39, normalizeCode39Value } from "../../lib/code39";
 import { cleanDisplayText, cleanWarehouseName, formatCurrency, formatNumber } from "../../lib/format";
 import { Badge, Button, EmptyState, Field, Input, LoadingBlock, PageHeader, SectionCard, Select, Textarea } from "../../components/ui/primitives";
 import { useAuth } from "../../providers/AuthProvider";
@@ -192,6 +193,29 @@ function buildVariantLabel(productName: string, color?: string | null, size?: st
   return [productName.trim(), color?.trim(), size?.trim()].filter(Boolean).join(" - ");
 }
 
+function escapeHtml(value: string | number | null | undefined) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function getPrintableLabelBarcode(product: Product, color?: ProductColor | null, size?: ProductSize | null) {
+  const variantReference = buildVariantReference(product.reference, color?.reference, size?.reference);
+  const matchingVariant = (product.variants ?? []).find((variant) => {
+    const sameColor = !color || [variant.color, variant.reference].some((value) => String(value ?? "").toLowerCase().includes(color.name.toLowerCase()) || String(value ?? "").toLowerCase().includes(color.reference.toLowerCase()));
+    const sameSize = !size || [variant.size, variant.reference].some((value) => String(value ?? "").toLowerCase().includes(size.name.toLowerCase()) || String(value ?? "").toLowerCase().includes(size.reference.toLowerCase()));
+    return sameColor && sameSize;
+  });
+
+  return {
+    barcode: matchingVariant?.barcode || product.barcode || "",
+    reference: matchingVariant?.reference || variantReference || product.reference
+  };
+}
+
 function normalizeHeader(value: string) {
   return value
     .trim()
@@ -347,6 +371,353 @@ async function optimizeProductPhotoWithAi(imageUrl: string) {
   const { removeBackground } = await import("@imgly/background-removal");
   const transparentArticle = await removeBackground(imageUrl);
   return centerImageOnWhiteBackground(transparentArticle);
+}
+
+function StandaloneBarcodeLabelModal({ open, meta, onClose }: { open: boolean; meta: ProductMeta | null; onClose: () => void }) {
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [reference, setReference] = useState("");
+  const [results, setResults] = useState<Product[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [colorId, setColorId] = useState("");
+  const [sizeId, setSizeId] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    setReference("");
+    setResults([]);
+    setSelectedProduct(null);
+    setColorId("");
+    setSizeId("");
+    setQuantity("1");
+    setMessage(null);
+    window.setTimeout(() => searchInputRef.current?.focus(), 80);
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
+  const availableColors = (meta?.colors ?? []).filter((color) => color.isAvailable !== false);
+  const selectedColor = availableColors.find((color) => color.id === colorId) ?? null;
+  const selectedSize = (meta?.sizes ?? []).find((size) => size.id === sizeId) ?? null;
+
+  const labelData = useMemo(() => {
+    if (!selectedProduct) return null;
+    const printable = getPrintableLabelBarcode(selectedProduct, selectedColor, selectedSize);
+    const encodedBarcode = normalizeCode39Value(printable.barcode);
+    const variationLabel = [selectedColor?.name, selectedSize?.name].filter(Boolean).join(" - ");
+    return {
+      barcode: printable.barcode,
+      encodedBarcode,
+      canPrint: canEncodeCode39(encodedBarcode),
+      categoryLabel: selectedProduct.category?.name || selectedProduct.type?.name || "Galerie des Tanneurs",
+      title: variationLabel || selectedProduct.name,
+      reference: printable.reference,
+      priceLabel: formatCurrency(Number(selectedProduct.promoPriceActive ? selectedProduct.promoPriceTtc ?? selectedProduct.salePriceTtc : selectedProduct.salePriceTtc))
+    };
+  }, [selectedProduct, selectedColor, selectedSize]);
+
+  const labelPreviewSvg = labelData?.canPrint
+    ? buildCode39Svg(labelData.encodedBarcode, { height: 46, narrowBarWidth: 1.6, wideBarWidth: 4.2, quietZone: 10 })
+    : "";
+
+  async function selectProduct(product: Product) {
+    setMessage(null);
+    setColorId("");
+    setSizeId("");
+    try {
+      const detailedProduct = await api<Product>(`/products/${product.id}`);
+      setSelectedProduct(detailedProduct);
+    } catch {
+      setSelectedProduct(product);
+    }
+  }
+
+  async function searchProduct() {
+    const query = reference.trim();
+    if (!query) {
+      setMessage("Saisis une reference ou un code-barres.");
+      searchInputRef.current?.focus();
+      return;
+    }
+
+    setLoadingSearch(true);
+    setMessage(null);
+    setResults([]);
+    setSelectedProduct(null);
+    setColorId("");
+    setSizeId("");
+
+    try {
+      const products = await api<Product[]>(`/products?search=${encodeURIComponent(query)}`);
+      const nextResults = products.slice(0, 8);
+      setResults(nextResults);
+      if (!nextResults.length) {
+        setMessage("Aucun article trouve pour cette reference.");
+        return;
+      }
+
+      const normalizedQuery = query.toLowerCase();
+      const preferredProduct = nextResults.find((product) => [product.reference, product.barcode].some((value) => String(value ?? "").toLowerCase() === normalizedQuery)) ?? nextResults[0];
+      await selectProduct(preferredProduct);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Recherche article impossible.");
+    } finally {
+      setLoadingSearch(false);
+    }
+  }
+
+  function printLabels() {
+    if (!selectedProduct || !labelData) {
+      setMessage("Choisis d'abord un article.");
+      return;
+    }
+    if (!labelData.barcode.trim() || !labelData.canPrint) {
+      setMessage("Code-barres incompatible avec l'impression etiquette.");
+      return;
+    }
+
+    const copies = Math.max(1, Math.min(500, Number.parseInt(quantity, 10) || 1));
+    const barcodeSvg = buildCode39Svg(labelData.encodedBarcode, { height: 62, narrowBarWidth: 1.8, wideBarWidth: 4.6, quietZone: 12 });
+    const labelsMarkup = Array.from({ length: copies }, () => `
+      <section class="label">
+        <div class="category">${escapeHtml(labelData.categoryLabel)}</div>
+        <div class="subtitle">${escapeHtml(labelData.title)}</div>
+        <div class="meta-row">
+          <div class="reference">${escapeHtml(labelData.reference)}</div>
+          <div class="price">${escapeHtml(labelData.priceLabel)}</div>
+        </div>
+        <div class="barcode-wrap">${barcodeSvg}</div>
+        <div class="barcode-text">${escapeHtml(labelData.encodedBarcode)}</div>
+      </section>
+    `).join("");
+
+    const popup = window.open("", "_blank", "width=900,height=720");
+    if (!popup) {
+      setMessage("Autorise les pop-ups pour lancer l'impression.");
+      return;
+    }
+
+    popup.document.write(`
+      <!doctype html>
+      <html lang="fr">
+        <head>
+          <meta charset="utf-8" />
+          <title>Etiquettes code-barres - ${escapeHtml(labelData.reference)}</title>
+          <style>
+            @page { size: 50mm 30mm; margin: 0; }
+            * { box-sizing: border-box; }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              font-family: Arial, Helvetica, "Liberation Sans", sans-serif;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              text-rendering: geometricPrecision;
+            }
+            body { display: block; }
+            .label {
+              width: 50mm;
+              height: 30mm;
+              padding: 2.2mm 2.2mm 1.8mm;
+              page-break-after: always;
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+              justify-content: flex-start;
+              gap: 1mm;
+            }
+            .label:last-child { page-break-after: auto; }
+            .category {
+              font-size: 7.6pt;
+              line-height: 1.05;
+              font-weight: 800;
+              letter-spacing: 0.01em;
+              color: #111111;
+              min-height: 3.4mm;
+            }
+            .subtitle {
+              font-size: 6.3pt;
+              line-height: 1.05;
+              font-weight: 600;
+              color: #111111;
+              min-height: 2.6mm;
+            }
+            .meta-row {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 2mm;
+            }
+            .reference {
+              font-size: 7pt;
+              line-height: 1;
+              font-weight: 800;
+              letter-spacing: 0.03em;
+              color: #111111;
+            }
+            .price {
+              font-size: 8.6pt;
+              line-height: 1;
+              font-weight: 900;
+              letter-spacing: -0.01em;
+              color: #111111;
+              white-space: nowrap;
+              text-align: right;
+            }
+            .barcode-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 11.5mm; margin-top: 0.4mm; }
+            .barcode-wrap svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
+            .barcode-text {
+              font-family: "Courier New", monospace;
+              text-align: center;
+              font-size: 7.2pt;
+              line-height: 1;
+              font-weight: 700;
+              letter-spacing: 0.08em;
+              color: #111111;
+            }
+          </style>
+        </head>
+        <body>
+          ${labelsMarkup}
+          <script>
+            window.onload = function () {
+              window.print();
+              setTimeout(function () { window.close(); }, 220);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#050403]/78 p-3 backdrop-blur-[2px]" onMouseDown={onClose}>
+      <div className="max-h-[92vh] w-full max-w-[860px] overflow-hidden rounded-[30px] border border-white/12 bg-[linear-gradient(180deg,#17120f,#100c0a)] shadow-[0_32px_90px_rgba(0,0,0,0.55)]" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-5 py-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/80">Imprimer etiquettes</p>
+            <h2 className="mt-1 text-xl font-semibold text-white">Etiquettes code-barres</h2>
+          </div>
+          <button type="button" className="btn-ghost !h-10 !w-10 !rounded-full !p-0" onClick={onClose} aria-label="Fermer">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="max-h-[calc(92vh-78px)] overflow-y-auto p-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_310px]">
+            <div className="space-y-4">
+              <div className="rounded-[24px] border border-white/10 bg-black/18 p-4">
+                <Field label="Reference article">
+                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_150px]">
+                    <input
+                      ref={searchInputRef}
+                      className="input-base w-full"
+                      value={reference}
+                      placeholder="Saisir reference ou code-barres..."
+                      onChange={(event) => setReference(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void searchProduct();
+                        }
+                      }}
+                    />
+                    <Button type="button" onClick={() => void searchProduct()} disabled={loadingSearch}>
+                      {loadingSearch ? "Recherche..." : "Charger"}
+                    </Button>
+                  </div>
+                </Field>
+
+                {results.length ? (
+                  <div className="mt-3 space-y-2">
+                    {results.map((product) => (
+                      <button
+                        key={product.id}
+                        type="button"
+                        className={selectedProduct?.id === product.id ? "w-full rounded-2xl border border-orange-300/40 bg-orange-300/12 px-4 py-3 text-left" : "w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition hover:border-orange-200/30 hover:bg-white/[0.06]"}
+                        onClick={() => void selectProduct(product)}
+                      >
+                        <span className="block text-sm font-semibold text-white">{product.reference} - {product.name}</span>
+                        <span className="mt-1 block text-xs text-[#cdbfb1]">{product.barcode || "Sans code-barres"} - {product.category?.name ?? "Sans categorie"}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <Field label="Couleur">
+                  <Select value={colorId} onChange={(event) => setColorId(event.target.value)} disabled={!selectedProduct}>
+                    <option value="">Choisir couleur</option>
+                    {availableColors.map((color) => (
+                      <option key={color.id} value={color.id}>{color.reference ? `${color.reference} - ${color.name}` : color.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Taille">
+                  <Select value={sizeId} onChange={(event) => setSizeId(event.target.value)} disabled={!selectedProduct}>
+                    <option value="">Sans taille</option>
+                    {meta?.sizes.map((size) => (
+                      <option key={size.id} value={size.id}>{size.reference ? `${size.reference} - ${size.name}` : size.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Quantite">
+                  <Input type="number" min={1} max={500} value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+                </Field>
+              </div>
+
+              {message ? <div className="rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-medium text-amber-100">{message}</div> : null}
+            </div>
+
+            <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-200/70">Apercu</p>
+                  <p className="mt-1 text-sm text-[#d9c9b8]">Format 50 x 30 mm</p>
+                </div>
+                <Badge tone="warning">{Math.max(1, Number.parseInt(quantity, 10) || 1)} etiquette(s)</Badge>
+              </div>
+
+              {selectedProduct && labelData ? (
+                <div className="rounded-[20px] border border-white/10 bg-white px-3 py-3">
+                  <p className="truncate text-[11px] font-semibold text-[#18120e]">{labelData.categoryLabel}</p>
+                  <p className="mt-1 truncate text-[9px] text-[#5c5147]">{labelData.title}</p>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-semibold tracking-[0.06em] text-[#18120e]">{labelData.reference}</p>
+                    <p className="whitespace-nowrap text-[12px] font-bold tracking-tight text-[#18120e]">{labelData.priceLabel}</p>
+                  </div>
+                  {labelPreviewSvg ? <div className="mt-2 h-[58px]" dangerouslySetInnerHTML={{ __html: labelPreviewSvg }} /> : <div className="mt-2 rounded-xl bg-rose-50 px-3 py-4 text-center text-xs font-semibold text-rose-700">Code-barres invalide</div>}
+                  <p className="mt-1 text-center text-[11px] font-semibold tracking-[0.14em] text-[#18120e]">{labelData.encodedBarcode || "-"}</p>
+                </div>
+              ) : (
+                <EmptyState title="Aucun article" description="Charge une reference pour preparer les etiquettes." compact />
+              )}
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-white/10 pt-4">
+            <Button type="button" variant="secondary" onClick={onClose}>Fermer</Button>
+            <Button type="button" onClick={printLabels} disabled={!selectedProduct || !labelData?.canPrint}>
+              <Printer className="mr-2 h-4 w-4" />
+              Imprimer
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ProductModal({
@@ -1087,6 +1458,7 @@ export function ProductsPage() {
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [standaloneLabelOpen, setStandaloneLabelOpen] = useState(false);
   const [form, setForm] = useState<ProductForm>(defaultForm);
   const [error, setError] = useState<string | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
@@ -1401,6 +1773,10 @@ export function ProductsPage() {
                   {importing ? "Import..." : "Import CSV"}
                 </Button>
               ) : null}
+              <Button variant="secondary" className="!h-9 !px-3.5 !text-[13px]" onClick={() => setStandaloneLabelOpen(true)}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimer etiquettes
+              </Button>
               <Button variant="secondary" className="!h-9 !px-3.5 !text-[13px]" onClick={() => void load(search)}>Actualiser</Button>
               {canEditProducts ? (
                 <Button className="!h-9 !px-3.5 !text-[13px]" onClick={openCreateModal}>
@@ -1516,6 +1892,7 @@ export function ProductsPage() {
         onChange={patchForm}
         onVariantsChange={replaceVariants}
       />
+      <StandaloneBarcodeLabelModal open={standaloneLabelOpen} meta={meta} onClose={() => setStandaloneLabelOpen(false)} />
     </>
   );
 }
