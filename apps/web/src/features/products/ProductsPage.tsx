@@ -751,7 +751,12 @@ function StandaloneBarcodeLabelModal({ open, onClose }: { open: boolean; onClose
                     <p className="text-[10px] font-semibold tracking-[0.06em] text-[#18120e]">{labelData.reference}</p>
                     <p className="whitespace-nowrap text-[12px] font-bold tracking-tight text-[#18120e]">{labelData.priceLabel}</p>
                   </div>
-                  {labelPreviewSvg ? <div className="mt-2 h-[58px]" dangerouslySetInnerHTML={{ __html: labelPreviewSvg }} /> : <div className="mt-2 rounded-xl bg-rose-50 px-3 py-4 text-center text-xs font-semibold text-rose-700">Code-barres invalide</div>}
+                  {labelPreviewSvg ? (
+                    <div
+                      className="mt-2 h-[58px] w-full overflow-hidden rounded-lg [&_svg]:block [&_svg]:h-full [&_svg]:w-full [&_svg]:max-w-full"
+                      dangerouslySetInnerHTML={{ __html: labelPreviewSvg }}
+                    />
+                  ) : <div className="mt-2 rounded-xl bg-rose-50 px-3 py-4 text-center text-xs font-semibold text-rose-700">Code-barres invalide</div>}
                   <p className="mt-1 text-center text-[11px] font-semibold tracking-[0.14em] text-[#18120e]">{labelData.encodedBarcode || "-"}</p>
                 </div>
               ) : (
