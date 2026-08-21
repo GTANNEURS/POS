@@ -464,13 +464,17 @@ function StandaloneBarcodeLabelModal({ open, onClose }: { open: boolean; onClose
     if (!selectedProduct) return null;
     const printable = getPrintableLabelBarcode(selectedProduct, selectedColor, selectedSize);
     const encodedBarcode = normalizeCode39Value(printable.barcode);
-    const variationLabel = [selectedColor?.name, selectedSize?.name].filter(Boolean).join(" - ");
+    const colorLabel = selectedColor
+      ? [selectedColor.reference, selectedColor.name].filter(Boolean).join(" - ")
+      : "";
     return {
       barcode: printable.barcode,
       encodedBarcode,
       canPrint: canEncodeCode39(encodedBarcode),
       categoryLabel: selectedProduct.category?.name || selectedProduct.type?.name || "Galerie des Tanneurs",
-      title: variationLabel || selectedProduct.name,
+      title: selectedProduct.name,
+      colorLabel,
+      sizeLabel: selectedSize?.name ?? "",
       reference: printable.reference,
       priceLabel: formatCurrency(Number(selectedProduct.promoPriceActive ? selectedProduct.promoPriceTtc ?? selectedProduct.salePriceTtc : selectedProduct.salePriceTtc))
     };
@@ -541,11 +545,12 @@ function StandaloneBarcodeLabelModal({ open, onClose }: { open: boolean; onClose
     const labelsMarkup = Array.from({ length: copies }, () => `
       <section class="label">
         <div class="category">${escapeHtml(labelData.categoryLabel)}</div>
-        <div class="subtitle">${escapeHtml(labelData.title)}</div>
-        <div class="meta-row">
-          <div class="reference">${escapeHtml(labelData.reference)}</div>
-          <div class="price">${escapeHtml(labelData.priceLabel)}</div>
+        <div class="variation-row">
+          <div class="variation-color">${escapeHtml(labelData.colorLabel || labelData.title)}</div>
+          <div class="variation-size">${escapeHtml(labelData.sizeLabel)}</div>
         </div>
+        <div class="reference">${escapeHtml(labelData.reference)}</div>
+        <div class="price">${escapeHtml(labelData.priceLabel)}</div>
         <div class="barcode-wrap">${barcodeSvg}</div>
         <div class="barcode-text">${escapeHtml(labelData.encodedBarcode)}</div>
       </section>
@@ -596,20 +601,34 @@ function StandaloneBarcodeLabelModal({ open, onClose }: { open: boolean; onClose
               color: #111111;
               min-height: 3.4mm;
             }
-            .subtitle {
-              font-size: 6.3pt;
-              line-height: 1.05;
-              font-weight: 600;
-              color: #111111;
-              min-height: 2.6mm;
-            }
-            .meta-row {
+            .variation-row {
               display: flex;
               align-items: center;
               justify-content: space-between;
               gap: 2mm;
+              min-height: 2.8mm;
+            }
+            .variation-color {
+              min-width: 0;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              font-size: 6.4pt;
+              line-height: 1.05;
+              font-weight: 700;
+              color: #111111;
+            }
+            .variation-size {
+              flex: 0 0 auto;
+              white-space: nowrap;
+              text-align: right;
+              font-size: 6.8pt;
+              line-height: 1;
+              font-weight: 800;
+              color: #111111;
             }
             .reference {
+              display: block;
               font-size: 7pt;
               line-height: 1;
               font-weight: 800;
@@ -617,6 +636,8 @@ function StandaloneBarcodeLabelModal({ open, onClose }: { open: boolean; onClose
               color: #111111;
             }
             .price {
+              display: block;
+              margin-top: -0.1mm;
               font-size: 8.6pt;
               line-height: 1;
               font-weight: 900;
@@ -746,11 +767,12 @@ function StandaloneBarcodeLabelModal({ open, onClose }: { open: boolean; onClose
               {selectedProduct && labelData ? (
                 <div className="rounded-[20px] border border-white/10 bg-white px-3 py-3">
                   <p className="truncate text-[11px] font-semibold text-[#18120e]">{labelData.categoryLabel}</p>
-                  <p className="mt-1 truncate text-[9px] text-[#5c5147]">{labelData.title}</p>
                   <div className="mt-1 flex items-center justify-between gap-2">
-                    <p className="text-[10px] font-semibold tracking-[0.06em] text-[#18120e]">{labelData.reference}</p>
-                    <p className="whitespace-nowrap text-[12px] font-bold tracking-tight text-[#18120e]">{labelData.priceLabel}</p>
+                    <p className="min-w-0 truncate text-[9px] font-semibold text-[#18120e]">{labelData.colorLabel || labelData.title}</p>
+                    {labelData.sizeLabel ? <p className="whitespace-nowrap text-[9px] font-bold text-[#18120e]">{labelData.sizeLabel}</p> : null}
                   </div>
+                  <p className="mt-1 text-[10px] font-semibold tracking-[0.06em] text-[#18120e]">{labelData.reference}</p>
+                  <p className="mt-0.5 text-right text-[12px] font-bold tracking-tight text-[#18120e]">{labelData.priceLabel}</p>
                   {labelPreviewSvg ? (
                     <div
                       className="mt-2 h-[58px] w-full overflow-hidden rounded-lg [&_svg]:block [&_svg]:h-full [&_svg]:w-full [&_svg]:max-w-full"
