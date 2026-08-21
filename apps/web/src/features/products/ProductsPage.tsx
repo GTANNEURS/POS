@@ -15,6 +15,7 @@ type ProductVariant = {
   label?: string | null;
   size?: string | null;
   color?: string | null;
+  colorReference?: string | null;
   reference?: string | null;
   barcode?: string | null;
   stockOnHand: number;
@@ -202,11 +203,21 @@ function escapeHtml(value: string | number | null | undefined) {
     .replace(/'/g, "&#039;");
 }
 
-function getPrintableLabelBarcode(product: Product, color?: ProductColor | null, size?: ProductSize | null) {
+type LabelVariationChoice = { id: string; name: string; reference?: string | null };
+
+function getPrintableLabelBarcode(product: Product, color?: LabelVariationChoice | null, size?: LabelVariationChoice | null) {
   const variantReference = buildVariantReference(product.reference, color?.reference, size?.reference);
   const matchingVariant = (product.variants ?? []).find((variant) => {
-    const sameColor = !color || [variant.color, variant.reference].some((value) => String(value ?? "").toLowerCase().includes(color.name.toLowerCase()) || String(value ?? "").toLowerCase().includes(color.reference.toLowerCase()));
-    const sameSize = !size || [variant.size, variant.reference].some((value) => String(value ?? "").toLowerCase().includes(size.name.toLowerCase()) || String(value ?? "").toLowerCase().includes(size.reference.toLowerCase()));
+    const colorReference = String(color?.reference ?? "").toLowerCase();
+    const sizeReference = String(size?.reference ?? "").toLowerCase();
+    const sameColor = !color || [variant.color, variant.reference].some((value) => {
+      const normalizedValue = String(value ?? "").toLowerCase();
+      return normalizedValue.includes(color.name.toLowerCase()) || Boolean(colorReference && normalizedValue.includes(colorReference));
+    });
+    const sameSize = !size || [variant.size, variant.reference].some((value) => {
+      const normalizedValue = String(value ?? "").toLowerCase();
+      return normalizedValue.includes(size.name.toLowerCase()) || Boolean(sizeReference && normalizedValue.includes(sizeReference));
+    });
     return sameColor && sameSize;
   });
 
@@ -373,7 +384,7 @@ async function optimizeProductPhotoWithAi(imageUrl: string) {
   return centerImageOnWhiteBackground(transparentArticle);
 }
 
-function StandaloneBarcodeLabelModal({ open, meta, onClose }: { open: boolean; meta: ProductMeta | null; onClose: () => void }) {
+function StandaloneBarcodeLabelModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [reference, setReference] = useState("");
   const [results, setResults] = useState<Product[]>([]);
@@ -403,9 +414,51 @@ function StandaloneBarcodeLabelModal({ open, meta, onClose }: { open: boolean; m
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
 
-  const availableColors = (meta?.colors ?? []).filter((color) => color.isAvailable !== false);
-  const selectedColor = availableColors.find((color) => color.id === colorId) ?? null;
-  const selectedSize = (meta?.sizes ?? []).find((size) => size.id === sizeId) ?? null;
+  const variantColors = useMemo(() => {
+    const variants = selectedProduct?.variants ?? [];
+    const matchingVariants = sizeId ? variants.filter((variant) => (variant.size?.trim() || "") === sizeId) : variants;
+    const choices = new Map<string, LabelVariationChoice>();
+    matchingVariants.forEach((variant) => {
+      const name = variant.color?.trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      if (!choices.has(key)) {
+        choices.set(key, { id: name, name, reference: variant.colorReference ?? null });
+      }
+    });
+    return Array.from(choices.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [selectedProduct, sizeId]);
+
+  const variantSizes = useMemo(() => {
+    const variants = selectedProduct?.variants ?? [];
+    const matchingVariants = colorId ? variants.filter((variant) => (variant.color?.trim() || "") === colorId) : variants;
+    const choices = new Map<string, LabelVariationChoice>();
+    matchingVariants.forEach((variant) => {
+      const name = variant.size?.trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      if (!choices.has(key)) {
+        choices.set(key, { id: name, name });
+      }
+    });
+    return Array.from(choices.values()).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  }, [selectedProduct, colorId]);
+
+  useEffect(() => {
+    if (colorId && !variantColors.some((color) => color.id === colorId)) {
+      setColorId("");
+    }
+  }, [colorId, variantColors]);
+
+  useEffect(() => {
+    if (sizeId && !variantSizes.some((size) => size.id === sizeId)) {
+      setSizeId("");
+    }
+  }, [sizeId, variantSizes]);
+
+  const selectedColor = variantColors.find((color) => color.id === colorId) ?? null;
+  const selectedSize = variantSizes.find((size) => size.id === sizeId) ?? null;
+  const hasDeclinaisons = Boolean(selectedProduct?.variants?.length);
 
   const labelData = useMemo(() => {
     if (!selectedProduct) return null;
@@ -658,17 +711,17 @@ function StandaloneBarcodeLabelModal({ open, meta, onClose }: { open: boolean; m
 
               <div className="grid gap-4 md:grid-cols-3">
                 <Field label="Couleur">
-                  <Select value={colorId} onChange={(event) => setColorId(event.target.value)} disabled={!selectedProduct}>
-                    <option value="">Choisir couleur</option>
-                    {availableColors.map((color) => (
+                  <Select value={colorId} onChange={(event) => setColorId(event.target.value)} disabled={!selectedProduct || !hasDeclinaisons}>
+                    <option value="">{hasDeclinaisons ? "Choisir couleur" : "Aucune declinaison"}</option>
+                    {variantColors.map((color) => (
                       <option key={color.id} value={color.id}>{color.reference ? `${color.reference} - ${color.name}` : color.name}</option>
                     ))}
                   </Select>
                 </Field>
                 <Field label="Taille">
-                  <Select value={sizeId} onChange={(event) => setSizeId(event.target.value)} disabled={!selectedProduct}>
-                    <option value="">Sans taille</option>
-                    {meta?.sizes.map((size) => (
+                  <Select value={sizeId} onChange={(event) => setSizeId(event.target.value)} disabled={!selectedProduct || !hasDeclinaisons}>
+                    <option value="">{hasDeclinaisons ? "Sans taille / choisir taille" : "Aucune declinaison"}</option>
+                    {variantSizes.map((size) => (
                       <option key={size.id} value={size.id}>{size.reference ? `${size.reference} - ${size.name}` : size.name}</option>
                     ))}
                   </Select>
@@ -1892,7 +1945,7 @@ export function ProductsPage() {
         onChange={patchForm}
         onVariantsChange={replaceVariants}
       />
-      <StandaloneBarcodeLabelModal open={standaloneLabelOpen} meta={meta} onClose={() => setStandaloneLabelOpen(false)} />
+      <StandaloneBarcodeLabelModal open={standaloneLabelOpen} onClose={() => setStandaloneLabelOpen(false)} />
     </>
   );
 }
