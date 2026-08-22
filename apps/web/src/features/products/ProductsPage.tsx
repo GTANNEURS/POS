@@ -1016,8 +1016,33 @@ function ProductModal({
   };
 
   const addEmptyVariant = () => {
-    const selectedColor = selectedColors.length === 1 ? selectedColors[0] : null;
-    const selectedSize = selectedSizes.length === 1 ? selectedSizes[0] : null;
+    const selectedColorMatches = (meta?.colors ?? []).filter((item) => selectedColorIds.includes(item.id));
+    const existingColorNames = Array.from(new Set(form.variants.map((variant) => variant.color.trim()).filter(Boolean)));
+    const existingOnlyColor = existingColorNames.length === 1
+      ? (meta?.colors ?? []).find((color) => color.name === existingColorNames[0]) ?? { id: existingColorNames[0], name: existingColorNames[0], reference: "", type: "" }
+      : null;
+    const selectedColor = selectedColorMatches.length === 1
+      ? selectedColorMatches[0]
+      : filteredColors.length === 1
+        ? filteredColors[0]
+        : existingOnlyColor;
+    const selectedSizeMatches = (meta?.sizes ?? []).filter((item) => selectedSizeIds.includes(item.id));
+    const existingSizeNames = Array.from(new Set(form.variants.map((variant) => variant.size.trim()).filter(Boolean)));
+    const existingOnlySize = existingSizeNames.length === 1
+      ? (meta?.sizes ?? []).find((size) => size.name === existingSizeNames[0]) ?? { id: existingSizeNames[0], name: existingSizeNames[0], reference: "", type: "" }
+      : null;
+    const selectedSize = selectedSizeMatches.length === 1
+      ? selectedSizeMatches[0]
+      : filteredSizes.length === 1
+        ? filteredSizes[0]
+        : existingOnlySize;
+
+    if (!selectedColor && (meta?.colors ?? []).length > 0) {
+      setVariantMessage("Choisis une seule couleur avant d'ajouter une ligne.");
+      setActiveTab("variants");
+      return;
+    }
+
     const nextReference = form.reference
       ? buildVariantReference(form.reference, selectedColor?.reference, selectedSize?.reference) || `${slugSegment(form.reference)}-VAR-${form.variants.length + 1}`
       : "";
@@ -1434,7 +1459,8 @@ function ProductModal({
                           </div>
 
                           <div className="space-y-1.5">
-                            <div className="product-variant-grid-head hidden xl:grid xl:grid-cols-[96px_72px_minmax(0,1.1fr)_88px_40px] xl:gap-2 xl:rounded-[12px] xl:border xl:border-white/8 xl:bg-white/[0.03] xl:px-3 xl:py-2 xl:text-[10px] xl:font-medium xl:uppercase xl:tracking-[0.16em] xl:text-[#bfae9f]">
+                            <div className="product-variant-grid-head hidden xl:grid xl:grid-cols-[140px_96px_72px_minmax(0,1.1fr)_88px_40px] xl:gap-2 xl:rounded-[12px] xl:border xl:border-white/8 xl:bg-white/[0.03] xl:px-3 xl:py-2 xl:text-[10px] xl:font-medium xl:uppercase xl:tracking-[0.16em] xl:text-[#bfae9f]">
+                              <div>Couleur</div>
                               <div>Taille</div>
                               <div>Stock</div>
                               <div>Code-barres variante</div>
@@ -1458,7 +1484,14 @@ function ProductModal({
                                   </Button>
                                 </div>
 
-                                <div className="grid gap-1.5 xl:grid-cols-[96px_72px_minmax(0,1.1fr)_88px_40px] xl:items-center">
+                                <div className="grid gap-1.5 xl:grid-cols-[140px_96px_72px_minmax(0,1.1fr)_88px_40px] xl:items-center">
+                                  <label className="block space-y-1 xl:space-y-0">
+                                    <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-[#bfae9f] xl:hidden">Couleur</span>
+                                    <Select value={variant.color} onChange={(event) => updateVariant(index, { color: event.target.value })} className="!h-8 !border-white/12 !bg-black/35 !text-[12px] !text-[#f4e8dc]">
+                                      <option value="">Choisir</option>
+                                      {(meta?.colors ?? []).map((color) => <option key={color.id} value={color.name}>{color.reference ? `${color.reference} - ` : ""}{color.name}</option>)}
+                                    </Select>
+                                  </label>
                                   <label className="block space-y-1 xl:space-y-0">
                                     <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-[#bfae9f] xl:hidden">Taille</span>
                                     <Select value={variant.size} onChange={(event) => updateVariant(index, { size: event.target.value })} className="!h-8 !border-white/12 !bg-black/35 !text-[12px] !text-[#f4e8dc]">
