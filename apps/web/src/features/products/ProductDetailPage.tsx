@@ -65,7 +65,8 @@ type LabelOption = {
   id: string;
   title: string;
   categoryLabel: string;
-  subtitle: string;
+  colorLabel: string;
+  sizeLabel: string;
   reference: string;
   barcode: string;
   priceLabel: string;
@@ -108,6 +109,19 @@ function buildVariantLabelReference(productReference: string, variantReference?:
 
 function formatVariantSelectReference(reference: string) {
   return String(reference ?? "").trim().replace(/\s*-\s*/g, " - ");
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatLabelColorLine(color?: string | null, colorReference?: string | null) {
+  return [colorReference?.trim(), color?.trim()].filter(Boolean).join(" - ");
 }
 
 function isCentralWarehouseName(value?: string | null) {
@@ -214,12 +228,15 @@ export function ProductDetailPage() {
     return item.variants.flatMap((variant) => {
       const variantBarcode = String(variant.barcode ?? "").trim();
       if (!variantBarcode) return [];
+      const variantColor = variant.color?.trim() ?? "";
+      const variantSize = variant.size?.trim() ?? "";
       const variantLine = [variant.color?.trim(), variant.size?.trim()].filter(Boolean).join(" - ") || variant.label;
       return [{
         id: `variant:${variant.id}`,
         title: variantLine,
         categoryLabel: item.category?.name ?? "Sans categorie",
-        subtitle: "",
+        colorLabel: formatLabelColorLine(variantColor, variant.colorReference),
+        sizeLabel: variantSize,
         reference: buildVariantLabelReference(item.reference, variant.reference),
         barcode: variantBarcode,
         priceLabel: formatCurrency(Number(item.salePriceTtc))
@@ -425,16 +442,19 @@ export function ProductDetailPage() {
     const labelsMarkup = labels.map((entry) => {
       const encodedBarcode = normalizeCode39Value(entry.barcode);
       const barcodeSvg = buildCode39Svg(encodedBarcode, { height: 62, narrowBarWidth: 1.8, wideBarWidth: 4.6, quietZone: 12 });
+      const colorLabel = formatLabelColorLine(entry.color === "-" ? "" : entry.color, entry.colorReference);
+      const sizeLabel = entry.size === "-" ? "" : entry.size;
       return `
         <section class="label">
-          <div class="category">${item.category?.name ?? "Sans categorie"}</div>
-          <div class="subtitle">${entry.title}</div>
-          <div class="meta-row">
-            <div class="reference">${buildVariantLabelReference(item.reference, entry.reference)}</div>
-            <div class="price">${formatCurrency(Number(item.salePriceTtc))}</div>
+          <div class="category">${escapeHtml(item.category?.name ?? "Sans categorie")}</div>
+          <div class="variation-row">
+            <div class="variation-color">${escapeHtml(colorLabel || entry.title)}</div>
+            <div class="variation-size">${escapeHtml(sizeLabel)}</div>
           </div>
+          <div class="reference">${escapeHtml(buildVariantLabelReference(item.reference, entry.reference))}</div>
+          <div class="price">${escapeHtml(formatCurrency(Number(item.salePriceTtc)))}</div>
           <div class="barcode-wrap">${barcodeSvg}</div>
-          <div class="barcode-text">${encodedBarcode}</div>
+          <div class="barcode-text">${escapeHtml(encodedBarcode)}</div>
         </section>
       `;
     }).join("");
@@ -473,10 +493,11 @@ export function ProductDetailPage() {
             }
             .label:last-child { page-break-after: auto; }
             .category { font-size: 7.6pt; line-height: 1.05; font-weight: 800; letter-spacing: 0.01em; color: #111111; min-height: 3.4mm; }
-            .subtitle { font-size: 6.3pt; line-height: 1.05; font-weight: 600; color: #111111; min-height: 2.6mm; }
-            .meta-row { display: flex; align-items: center; justify-content: space-between; gap: 2mm; }
-            .reference { font-size: 7pt; line-height: 1; font-weight: 800; letter-spacing: 0.03em; color: #111111; }
-            .price { font-size: 8.2pt; line-height: 1; font-weight: 800; letter-spacing: -0.01em; color: #111111; white-space: nowrap; text-align: right; }
+            .variation-row { display: flex; align-items: center; justify-content: space-between; gap: 2mm; min-height: 2.8mm; }
+            .variation-color { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 6.4pt; line-height: 1.05; font-weight: 700; color: #111111; }
+            .variation-size { flex: 0 0 auto; white-space: nowrap; text-align: right; font-size: 6.8pt; line-height: 1; font-weight: 800; color: #111111; }
+            .reference { display: block; font-size: 7pt; line-height: 1; font-weight: 800; letter-spacing: 0.03em; color: #111111; }
+            .price { display: block; margin-top: -0.1mm; font-size: 8.2pt; line-height: 1; font-weight: 800; letter-spacing: -0.01em; color: #111111; white-space: nowrap; text-align: right; }
             .barcode-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 11.5mm; margin-top: 0.4mm; }
             .barcode-wrap svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
             .barcode-text { font-family: "Courier New", monospace; text-align: center; font-size: 7.2pt; line-height: 1; font-weight: 700; letter-spacing: 0.08em; color: #111111; }
@@ -547,14 +568,15 @@ export function ProductDetailPage() {
     const barcodeSvg = buildCode39Svg(encodedBarcode, { height: 62, narrowBarWidth: 1.8, wideBarWidth: 4.6, quietZone: 12 });
     const labelsMarkup = Array.from({ length: copies }, () => `
       <section class="label">
-        <div class="category">${selectedLabelOption.categoryLabel}</div>
-        <div class="subtitle">${selectedLabelOption.title}</div>
-        <div class="meta-row">
-          <div class="reference">${selectedLabelOption.reference}</div>
-          <div class="price">${selectedLabelOption.priceLabel}</div>
+        <div class="category">${escapeHtml(selectedLabelOption.categoryLabel)}</div>
+        <div class="variation-row">
+          <div class="variation-color">${escapeHtml(selectedLabelOption.colorLabel || selectedLabelOption.title)}</div>
+          <div class="variation-size">${escapeHtml(selectedLabelOption.sizeLabel)}</div>
         </div>
+        <div class="reference">${escapeHtml(selectedLabelOption.reference)}</div>
+        <div class="price">${escapeHtml(selectedLabelOption.priceLabel)}</div>
         <div class="barcode-wrap">${barcodeSvg}</div>
-        <div class="barcode-text">${encodedBarcode}</div>
+        <div class="barcode-text">${escapeHtml(encodedBarcode)}</div>
       </section>
     `).join("");
 
@@ -566,7 +588,7 @@ export function ProductDetailPage() {
       <html lang="fr">
         <head>
           <meta charset="utf-8" />
-          <title>Etiquettes code-barres - ${selectedLabelOption.reference}</title>
+          <title>Etiquettes code-barres - ${escapeHtml(selectedLabelOption.reference)}</title>
           <style>
             @page { size: 50mm 30mm; margin: 0; }
             * { box-sizing: border-box; }
@@ -600,20 +622,34 @@ export function ProductDetailPage() {
               color: #111111;
               min-height: 3.4mm;
             }
-            .subtitle {
-              font-size: 6.3pt;
-              line-height: 1.05;
-              font-weight: 600;
-              color: #111111;
-              min-height: 2.6mm;
-            }
-            .meta-row {
+            .variation-row {
               display: flex;
               align-items: center;
               justify-content: space-between;
               gap: 2mm;
+              min-height: 2.8mm;
+            }
+            .variation-color {
+              min-width: 0;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              font-size: 6.4pt;
+              line-height: 1.05;
+              font-weight: 700;
+              color: #111111;
+            }
+            .variation-size {
+              flex: 0 0 auto;
+              white-space: nowrap;
+              text-align: right;
+              font-size: 6.8pt;
+              line-height: 1;
+              font-weight: 800;
+              color: #111111;
             }
             .reference {
+              display: block;
               font-size: 7pt;
               line-height: 1;
               font-weight: 800;
@@ -621,6 +657,8 @@ export function ProductDetailPage() {
               color: #111111;
             }
             .price {
+              display: block;
+              margin-top: -0.1mm;
               font-size: 8.2pt;
               line-height: 1;
               font-weight: 800;
@@ -1081,12 +1119,13 @@ export function ProductDetailPage() {
                 </div>
                 <div className="rounded-[20px] border border-white/10 bg-white px-3 py-3">
                   <p className="truncate text-[11px] font-semibold text-[#18120e]">{selectedLabelOption.categoryLabel}</p>
-                  <p className="mt-1 truncate text-[9px] text-[#5c5147]">{selectedLabelOption.title}</p>
                   <div className="mt-1 flex items-center justify-between gap-2">
-                    <p className="text-[10px] font-semibold tracking-[0.06em] text-[#18120e]">{selectedLabelOption.reference}</p>
-                    <p className="whitespace-nowrap text-[12px] font-bold tracking-tight text-[#18120e]">{selectedLabelOption.priceLabel}</p>
+                    <p className="min-w-0 truncate text-[9px] font-semibold text-[#18120e]">{selectedLabelOption.colorLabel || selectedLabelOption.title}</p>
+                    {selectedLabelOption.sizeLabel ? <p className="whitespace-nowrap text-[9px] font-bold text-[#18120e]">{selectedLabelOption.sizeLabel}</p> : null}
                   </div>
-                  <div className="mt-2 h-[58px]" dangerouslySetInnerHTML={{ __html: labelPreviewSvg }} />
+                  <p className="mt-1 text-[10px] font-semibold tracking-[0.06em] text-[#18120e]">{selectedLabelOption.reference}</p>
+                  <p className="mt-0.5 text-right text-[12px] font-bold tracking-tight text-[#18120e]">{selectedLabelOption.priceLabel}</p>
+                  <div className="mt-2 h-[58px] w-full overflow-hidden rounded-lg [&_svg]:block [&_svg]:h-full [&_svg]:w-full [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: labelPreviewSvg }} />
                   <p className="mt-1 text-center text-[11px] font-semibold tracking-[0.14em] text-[#18120e]">{normalizeCode39Value(selectedLabelOption.barcode)}</p>
                 </div>
               </div>
