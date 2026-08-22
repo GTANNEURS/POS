@@ -832,6 +832,7 @@ function ProductModal({
   const [selectedSizeType, setSelectedSizeType] = useState("");
   const [photoProcessing, setPhotoProcessing] = useState(false);
   const [photoMessage, setPhotoMessage] = useState<string | null>(null);
+  const [variantMessage, setVariantMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -843,6 +844,7 @@ function ProductModal({
     setSelectedSizeType("");
     setPhotoProcessing(false);
     setPhotoMessage(null);
+    setVariantMessage(null);
 
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -1010,19 +1012,28 @@ function ProductModal({
 
   const removeVariant = (index: number) => {
     onVariantsChange(form.variants.filter((_, variantIndex) => variantIndex !== index));
+    setVariantMessage("Ligne de variante supprimee.");
   };
 
   const addEmptyVariant = () => {
+    const selectedColor = selectedColors.length === 1 ? selectedColors[0] : null;
+    const selectedSize = selectedSizes.length === 1 ? selectedSizes[0] : null;
+    const nextReference = form.reference
+      ? buildVariantReference(form.reference, selectedColor?.reference, selectedSize?.reference) || `${slugSegment(form.reference)}-VAR-${form.variants.length + 1}`
+      : "";
+
     onVariantsChange([
       ...form.variants,
       {
-        color: "",
-        size: "",
-        reference: form.reference ? `${slugSegment(form.reference)}-VAR-${form.variants.length + 1}` : "",
+        color: selectedColor?.name ?? "",
+        size: selectedSize?.name ?? "",
+        reference: nextReference,
         barcode: createBarcodeValue(),
         stockOnHand: "0"
       }
     ]);
+    setVariantMessage(`Ligne ajoutee${selectedColor ? ` pour ${selectedColor.reference ? `${selectedColor.reference} - ` : ""}${selectedColor.name}` : ""}.`);
+    setActiveTab("declinaisons");
   };
 
   const generateVariants = () => {
@@ -1064,6 +1075,7 @@ function ProductModal({
     }
 
     onVariantsChange(nextVariants);
+    setVariantMessage(`${nextVariants.length} declinaison(s) generee(s).`);
     setActiveTab("declinaisons");
   };
 
@@ -1380,6 +1392,11 @@ function ProductModal({
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-[#eadfd4]">{formatNumber(form.variants.length)} variante(s)</div>
                   </div>
+                  {variantMessage ? (
+                    <div className="rounded-[16px] border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm font-medium text-emerald-100">
+                      {variantMessage}
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button type="button" variant="secondary" className="!px-3" onClick={generateVariants}>Generer les declinaisons</Button>
@@ -1394,6 +1411,11 @@ function ProductModal({
                     <div className="product-variant-title text-sm font-semibold text-white">Declinaisons</div>
                     <div className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-[#eadfd4]">{formatNumber(form.variants.length)} variante(s)</div>
                   </div>
+                  {variantMessage ? (
+                    <div className="mb-3 rounded-[16px] border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm font-medium text-emerald-100">
+                      {variantMessage}
+                    </div>
+                  ) : null}
 
                   {!form.variants.length ? (
                     <EmptyState title="Aucune variante" description="Choisis des tailles et des couleurs puis genere les declinaisons." compact />
